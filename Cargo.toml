@@ -1,0 +1,15 @@
+[package]
+name = "gluaparse"
+version = "0.1.0"
+authors = ["lewis <me@lewis.to>"]
+edition = "2018"
+
+[lib]
+name = "gluaparse"
+
+[[bin]]
+name = "gluaparse"
+doc = false
+
+[dependencies]
+clap = "2.33.3"
