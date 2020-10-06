@@ -106,6 +106,24 @@ impl<'a> Tokens<'a> {
                 '(' => Token::LeftParen,
                 ')' => Token::RightParen,
                 '#' => Token::Hashtag,
+                '<' => {
+                    if reader.peek() == '=' {
+                        reader.advance(1);
+
+                        Token::LeftAngleBracketEqual
+                    } else {
+                        Token::LeftAngleBracket
+                    }
+                }
+                '>' => {
+                    if reader.peek() == '=' {
+                        reader.advance(1);
+
+                        Token::RightAngleBracketEqual
+                    } else {
+                        Token::RightAngleBracket
+                    }
+                }
                 '~' => {
                     if reader.char() != '=' {
                         return Err(Error::new("Expected = after ~".to_string()));
@@ -182,6 +200,9 @@ impl<'a> Tokens<'a> {
                             "nil" => Token::Nil,
                             "false" => Token::False,
                             "true" => Token::True,
+                            "and" => Token::And,
+                            "or" => Token::Or,
+                            "not" => Token::Not,
                             _ => Token::Ident(word),
                         }
                     }
