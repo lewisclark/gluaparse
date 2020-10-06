@@ -5,6 +5,12 @@ pub struct Error {
     err: String,
 }
 
+impl Error {
+    pub fn new(err: String) -> Self {
+        Self { err }
+    }
+}
+
 impl std::error::Error for Error {}
 
 impl Display for Error {

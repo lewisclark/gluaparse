@@ -5,3 +5,4 @@ local function foo(bob, jimmy)
 end
 
 foo(45, "hello")
+=

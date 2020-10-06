@@ -24,6 +24,6 @@ fn main() {
     file.read_to_string(&mut contents)
         .expect("Failed to read file contents");
 
-    let ast = gluaparse::parse(&contents);
+    let ast = gluaparse::parse(&contents).expect("Failed to parse Lua");
     println!("AST:\n{}", ast);
 }
