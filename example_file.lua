@@ -26,3 +26,7 @@ comment
 */
 
 ab != !ba
+
+ay && by
+
+ax || bx

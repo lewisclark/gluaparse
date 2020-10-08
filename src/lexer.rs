@@ -1,8 +1,6 @@
 use crate::error::Error;
 use std::str::FromStr;
 
-// TODO: &&, ||
-
 /* ---------- Reader ---------- */
 
 // This doesn't support iterating over grapheme clusters so unicode stuff probably won't be parsed nicely
@@ -292,6 +290,20 @@ impl<'a> Lexer<'a> {
                         Token::NotEqual
                     } else {
                         Token::Not
+                    }
+                }
+                '&' => {
+                    if self.reader.char() == '&' {
+                        Token::And
+                    } else {
+                        return Err(Error::new("Expected & after &".to_string()));
+                    }
+                }
+                '|' => {
+                    if self.reader.char() == '|' {
+                        Token::Or
+                    } else {
+                        return Err(Error::new("Expected | after |".to_string()));
                     }
                 }
                 _ => {
