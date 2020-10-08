@@ -115,9 +115,35 @@ impl<'a> Lexer<'a> {
     fn read_comment_single(&mut self) -> Token<'a> {
         let s = self
             .reader
-            .read_until(0, |c, cnext| c == '\n' || cnext.is_none());
+            .read_until(-1, |c, cnext| c == '\n' || cnext.is_none());
 
         self.reader.advance(1);
+
+        Token::Comment(s)
+    }
+
+    fn read_comment_multi(&mut self, is_cstyle: bool) -> Token<'a> {
+        self.reader.advance(1);
+
+        let s = if is_cstyle {
+            self.reader.read_until(0, |c, cnext| {
+                c == '*'
+                    && match cnext {
+                        Some(c) => c == '/',
+                        None => false,
+                    }
+            })
+        } else {
+            self.reader.read_until(0, |c, cnext| {
+                c == ']'
+                    && match cnext {
+                        Some(c) => c == ']',
+                        None => false,
+                    }
+            })
+        };
+
+        self.reader.advance(2);
 
         Token::Comment(s)
     }
@@ -149,19 +175,7 @@ impl<'a> Lexer<'a> {
                         self.reader.advance(1);
 
                         if self.reader.char() == '[' && self.reader.peek() == '[' {
-                            self.reader.advance(1);
-
-                            let s = self.reader.read_until(0, |c, cnext| {
-                                c == ']'
-                                    && match cnext {
-                                        Some(c) => c == ']',
-                                        None => false,
-                                    }
-                            });
-
-                            self.reader.advance(2);
-
-                            Token::Comment(s)
+                            self.read_comment_multi(false)
                         } else {
                             self.read_comment_single()
                         }
@@ -171,9 +185,13 @@ impl<'a> Lexer<'a> {
                 }
                 '*' => Token::Asterisk,
                 '/' => {
-                    if self.reader.peek() == '/' {
-                        self.reader.advance(1);
+                    let p = self.reader.peek();
+
+                    if p == '/' {
+                        self.reader.advance(2);
                         self.read_comment_single()
+                    } else if p == '*' {
+                        self.read_comment_multi(true)
                     } else {
                         Token::Slash
                     }
