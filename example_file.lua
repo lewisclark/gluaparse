@@ -16,3 +16,5 @@ comment!!!
 ]]
 
 do end
+
+// cstyle single line comment

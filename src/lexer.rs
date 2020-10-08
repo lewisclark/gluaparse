@@ -112,6 +112,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn read_comment_single(&mut self) -> Token<'a> {
+        let s = self
+            .reader
+            .read_until(0, |c, cnext| c == '\n' || cnext.is_none());
+
+        self.reader.advance(1);
+
+        Token::Comment(s)
+    }
+
     pub fn lex(mut self) -> Result<Self, Error> {
         while !self.reader.eof() {
             let c = self.reader.char();
@@ -153,20 +163,21 @@ impl<'a> Lexer<'a> {
 
                             Token::Comment(s)
                         } else {
-                            let s = self
-                                .reader
-                                .read_until(-1, |c, cnext| c == '\n' || cnext.is_none());
-
-                            self.reader.advance(1);
-
-                            Token::Comment(s)
+                            self.read_comment_single()
                         }
                     } else {
                         Token::Minus
                     }
                 }
                 '*' => Token::Asterisk,
-                '/' => Token::Slash,
+                '/' => {
+                    if self.reader.peek() == '/' {
+                        self.reader.advance(1);
+                        self.read_comment_single()
+                    } else {
+                        Token::Slash
+                    }
+                }
                 '^' => Token::Caret,
                 '%' => Token::Percent,
                 '{' => Token::LeftCurlyBracket,
