@@ -24,3 +24,5 @@ cstyle
 
 comment
 */
+
+ab != !ba

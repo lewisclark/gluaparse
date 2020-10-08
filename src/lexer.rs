@@ -1,7 +1,7 @@
 use crate::error::Error;
 use std::str::FromStr;
 
-// TODO: !=, !, &&, ||
+// TODO: &&, ||
 
 /* ---------- Reader ---------- */
 
@@ -228,7 +228,7 @@ impl<'a> Lexer<'a> {
                         return Err(Error::new("Expected = after ~".to_string()));
                     }
 
-                    Token::TildeEqual
+                    Token::NotEqual
                 }
                 '.' => {
                     let p = self.reader.peek();
@@ -285,6 +285,15 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 ']' => Token::RightSquareBracket,
+                '!' => {
+                    if self.reader.peek() == '=' {
+                        self.reader.advance(1);
+
+                        Token::NotEqual
+                    } else {
+                        Token::Not
+                    }
+                }
                 _ => {
                     if c.is_digit(10) {
                         self.read_num(c)?
@@ -381,7 +390,7 @@ pub enum Token<'a> {
     RightAngleBracket,
     RightAngleBracketEqual,
     EqualEqual,
-    TildeEqual,
+    NotEqual,
     And,
     Or,
 
