@@ -1,6 +1,8 @@
 use crate::error::Error;
 use std::str::FromStr;
 
+// TODO: !=, !, &&, ||
+
 /* ---------- Reader ---------- */
 
 // This doesn't support iterating over grapheme clusters so unicode stuff probably won't be parsed nicely
