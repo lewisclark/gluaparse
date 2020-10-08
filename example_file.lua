@@ -4,9 +4,15 @@ local function foo(bob, jimmy)
 	return bob
 end
 
-foo(0.3e12, 0x40, 989, .84, 5e+20, 5e-20, 4.57e-3, +50, -50 "hello", [[yeetus
-f
+foo(0.3e12, 0x40, 989, .84, 5e+20, 5e-20, 4.57e-3, +50, -50 "hello", [[yeetus]])
 
-f
-g
-g]])
+-- i am a single line comment
+
+--[[ i am
+a
+multiline
+comment!!!
+
+]]
+
+do end

@@ -39,13 +39,16 @@ impl<'a> Reader<'a> {
 
     pub fn read_until<F>(&mut self, shift: isize, f: F) -> &'a str
     where
-        F: Fn(char, char) -> bool,
+        F: Fn(char, Option<char>) -> bool,
     {
         let start = (self.pos as isize + shift) as usize;
 
         loop {
             let c = self.code[self.pos] as char;
-            let cnext = self.code[self.pos + 1] as char;
+            let cnext = match self.pos + 1 >= self.code.len() {
+                true => None,
+                false => Some(self.code[self.pos + 1] as char),
+            };
 
             if f(c, cnext) {
                 break;
@@ -128,8 +131,36 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '-' => {
-                    if self.reader.peek().is_digit(10) {
+                    let p = self.reader.peek();
+
+                    if p.is_digit(10) {
                         self.read_num(c)?
+                    } else if p == '-' {
+                        self.reader.advance(1);
+
+                        if self.reader.char() == '[' && self.reader.peek() == '[' {
+                            self.reader.advance(1);
+
+                            let s = self.reader.read_until(0, |c, cnext| {
+                                c == ']'
+                                    && match cnext {
+                                        Some(c) => c == ']',
+                                        None => false,
+                                    }
+                            });
+
+                            self.reader.advance(2);
+
+                            Token::Comment(s)
+                        } else {
+                            let s = self
+                                .reader
+                                .read_until(-1, |c, cnext| c == '\n' || cnext.is_none());
+
+                            self.reader.advance(1);
+
+                            Token::Comment(s)
+                        }
                     } else {
                         Token::Minus
                     }
@@ -208,9 +239,13 @@ impl<'a> Lexer<'a> {
                 '[' => {
                     if self.reader.peek() == '[' {
                         self.reader.advance(1);
-                        let s = self
-                            .reader
-                            .read_until(0, |c, cnext| c == ']' && cnext == ']');
+                        let s = self.reader.read_until(0, |c, cnext| {
+                            c == ']'
+                                && match cnext {
+                                    Some(c) => c == ']',
+                                    None => false,
+                                }
+                        });
                         self.reader.advance(2);
 
                         Token::Str(s)
@@ -327,4 +362,5 @@ pub enum Token<'a> {
     Str(&'a str),
     Int(isize),
     Float(f64),
+    Comment(&'a str),
 }
