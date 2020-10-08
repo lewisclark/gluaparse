@@ -2,7 +2,7 @@ pub mod ast;
 pub mod error;
 mod lexer;
 
-use ast::AstNode;
+use ast::{AstConstructor, AstNode};
 use error::Error;
 use lexer::Lexer;
 
@@ -12,5 +12,7 @@ pub fn parse(code: &str) -> Result<AstNode, Error> {
 
     println!("tokens: {:?}", tokens);
 
-    Ok(AstNode::Invalid)
+    let ast = AstConstructor::new(tokens).create()?.get();
+
+    Ok(ast.unwrap())
 }
