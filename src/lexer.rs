@@ -43,8 +43,14 @@ impl<'a> Reader<'a> {
     {
         let start = (self.pos as isize + shift) as usize;
 
-        // FIXME: self.pos + 1 index can panic
-        while !f(self.code[self.pos] as char, self.code[self.pos + 1] as char) {
+        loop {
+            let c = self.code[self.pos] as char;
+            let cnext = self.code[self.pos + 1] as char;
+
+            if f(c, cnext) {
+                break;
+            }
+
             self.pos += 1;
         }
 
