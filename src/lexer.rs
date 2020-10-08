@@ -1,9 +1,9 @@
 use crate::error::Error;
+use std::str::FromStr;
 
 /* ---------- Reader ---------- */
 
-// This doesn't support iterating over grapheme clusters so unicode varaible names won't be parsed
-// correctly
+// This doesn't support iterating over grapheme clusters so unicode stuff probably won't be parsed nicely
 #[derive(Debug)]
 pub struct Reader<'a> {
     code: &'a [u8],
@@ -37,7 +37,6 @@ impl<'a> Reader<'a> {
         self.pos += amount;
     }
 
-    //pub fn read_until(&mut self, f: fn(char) -> bool) -> &'a str {
     pub fn read_until<F>(&mut self, shift: isize, f: F) -> &'a str
     where
         F: Fn(char) -> bool,
@@ -60,33 +59,52 @@ impl<'a> Reader<'a> {
     }
 }
 
-/* ---------- Tokens ---------- */
+/* ---------- Lexer ---------- */
 
 #[derive(Debug)]
-pub struct Tokens<'a> {
+pub struct Lexer<'a> {
     tokens: Vec<Token<'a>>,
+    reader: Reader<'a>,
 }
 
-// TODO: Support multi-line strings
-fn read_string<'a>(reader: &mut Reader, c: char) -> Token<'a> {
-    Token::Invalid
-}
+impl<'a> Lexer<'a> {
+    pub fn from_source(code: &'a str) -> Self {
+        Self {
+            tokens: Vec::new(),
+            reader: Reader::from_source(code),
+        }
+    }
 
-fn read_number<'a>(reader: &mut Reader) -> Token<'a> {
-    Token::Invalid
-}
+    pub fn tokens(&self) -> &Vec<Token<'a>> {
+        &self.tokens
+    }
 
-fn read_keyword<'a>(reader: &mut Reader) -> Token<'a> {
-    Token::Invalid
-}
+    fn read_num(&mut self, c: char) -> Result<Token<'a>, Error> {
+        if c == '0' && self.reader.peek().to_ascii_lowercase() == 'x' {
+            self.reader.advance(1);
+            let num = self.reader.read_until(0, |c| !c.is_digit(16));
 
-impl<'a> Tokens<'a> {
-    pub fn from_source(code: &'a str) -> Result<Self, Error> {
-        let mut reader = Reader::from_source(code);
-        let mut tokens = Vec::new();
+            Ok(Token::Int(
+                isize::from_str_radix(num, 16).map_err(Error::from_err)?,
+            ))
+        } else {
+            let num = self.reader.read_until(-1, |c| {
+                !c.is_digit(10) && c.to_ascii_lowercase() != 'e' && c != '-' && c != '+' && c != '.'
+            });
 
-        while !reader.eof() {
-            let c = reader.char();
+            if let Some(_) = num.to_ascii_lowercase().find(|c| c == 'e' || c == '.') {
+                Ok(Token::Float(f64::from_str(num).map_err(Error::from_err)?))
+            } else {
+                Ok(Token::Int(
+                    isize::from_str_radix(num, 10).map_err(Error::from_err)?,
+                ))
+            }
+        }
+    }
+
+    pub fn lex(mut self) -> Result<Self, Error> {
+        while !self.reader.eof() {
+            let c = self.reader.char();
 
             if c.is_whitespace() {
                 continue;
@@ -95,8 +113,20 @@ impl<'a> Tokens<'a> {
             let token = match c {
                 ';' => Token::SemiColon,
                 ',' => Token::Comma,
-                '+' => Token::Plus,
-                '-' => Token::Minus,
+                '+' => {
+                    if self.reader.peek().is_digit(10) {
+                        self.read_num(c)?
+                    } else {
+                        Token::Plus
+                    }
+                }
+                '-' => {
+                    if self.reader.peek().is_digit(10) {
+                        self.read_num(c)?
+                    } else {
+                        Token::Minus
+                    }
+                }
                 '*' => Token::Asterisk,
                 '/' => Token::Slash,
                 '^' => Token::Caret,
@@ -107,8 +137,8 @@ impl<'a> Tokens<'a> {
                 ')' => Token::RightParen,
                 '#' => Token::Hashtag,
                 '<' => {
-                    if reader.peek() == '=' {
-                        reader.advance(1);
+                    if self.reader.peek() == '=' {
+                        self.reader.advance(1);
 
                         Token::LeftAngleBracketEqual
                     } else {
@@ -116,8 +146,8 @@ impl<'a> Tokens<'a> {
                     }
                 }
                 '>' => {
-                    if reader.peek() == '=' {
-                        reader.advance(1);
+                    if self.reader.peek() == '=' {
+                        self.reader.advance(1);
 
                         Token::RightAngleBracketEqual
                     } else {
@@ -125,30 +155,34 @@ impl<'a> Tokens<'a> {
                     }
                 }
                 '~' => {
-                    if reader.char() != '=' {
+                    if self.reader.char() != '=' {
                         return Err(Error::new("Expected = after ~".to_string()));
                     }
 
                     Token::TildeEqual
                 }
                 '.' => {
-                    if reader.peek() == '.' {
-                        reader.advance(1);
+                    let p = self.reader.peek();
 
-                        if reader.peek() == '.' {
-                            reader.advance(1);
+                    if p == '.' {
+                        self.reader.advance(1);
+
+                        if self.reader.peek() == '.' {
+                            self.reader.advance(1);
 
                             Token::DotDotDot
                         } else {
                             Token::DotDot
                         }
+                    } else if p.is_digit(10) {
+                        self.read_num(c)?
                     } else {
                         Token::Dot
                     }
                 }
                 '=' => {
-                    if reader.peek() == '=' {
-                        reader.advance(1);
+                    if self.reader.peek() == '=' {
+                        self.reader.advance(1);
 
                         Token::EqualEqual
                     } else {
@@ -156,28 +190,30 @@ impl<'a> Tokens<'a> {
                     }
                 }
                 '\"' | '\'' => {
-                    let s = reader.read_until_delim(0, c);
+                    let s = self.reader.read_until_delim(0, c);
 
-                    if reader.char() == c {
+                    if self.reader.char() == c {
                         Token::Str(s)
                     } else {
                         return Err(Error::new(format!("Expected string end delimiter {}", c)));
                     }
                 }
                 '[' => {
-                    if reader.peek() == '[' {
-                        read_string(&mut reader, c)
+                    if self.reader.peek() == '[' {
+                        // Read multiline string
+
+                        Token::Invalid
                     } else {
                         Token::LeftSquareBracket
                     }
                 }
                 ']' => Token::RightSquareBracket,
-                c => {
+                _ => {
                     if c.is_digit(10) {
-                        read_number(&mut reader)
+                        self.read_num(c)?
                     } else {
                         // Read keyword or iden
-                        let word = reader.read_until_nonalphanumeric(-1);
+                        let word = self.reader.read_until_nonalphanumeric(-1);
 
                         match word {
                             "do" => Token::Do,
@@ -209,10 +245,10 @@ impl<'a> Tokens<'a> {
                 }
             };
 
-            tokens.push(token);
+            self.tokens.push(token);
         }
 
-        Ok(Self { tokens })
+        Ok(self)
     }
 }
 
@@ -278,6 +314,8 @@ pub enum Token<'a> {
 
     Ident(&'a str),
     Str(&'a str),
+    Int(isize),
+    Float(f64),
 
     Invalid,
 }

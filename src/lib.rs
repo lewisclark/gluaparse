@@ -4,10 +4,11 @@ mod lexer;
 
 use ast::AstNode;
 use error::Error;
-use lexer::Tokens;
+use lexer::Lexer;
 
 pub fn parse(code: &str) -> Result<AstNode, Error> {
-    let tokens = Tokens::from_source(code)?;
+    let lexer = Lexer::from_source(code).lex()?;
+    let tokens = lexer.tokens();
 
     println!("tokens: {:?}", tokens);
 

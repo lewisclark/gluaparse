@@ -9,6 +9,12 @@ impl Error {
     pub fn new(err: String) -> Self {
         Self { err }
     }
+
+    pub fn from_err(e: impl std::error::Error) -> Self {
+        Self {
+            err: format!("{}", e),
+        }
+    }
 }
 
 impl std::error::Error for Error {}
