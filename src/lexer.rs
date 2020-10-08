@@ -39,11 +39,12 @@ impl<'a> Reader<'a> {
 
     pub fn read_until<F>(&mut self, shift: isize, f: F) -> &'a str
     where
-        F: Fn(char) -> bool,
+        F: Fn(char, char) -> bool,
     {
         let start = (self.pos as isize + shift) as usize;
 
-        while !f(self.code[self.pos] as char) {
+        // FIXME: self.pos + 1 index can panic
+        while !f(self.code[self.pos] as char, self.code[self.pos + 1] as char) {
             self.pos += 1;
         }
 
@@ -51,11 +52,11 @@ impl<'a> Reader<'a> {
     }
 
     pub fn read_until_delim(&mut self, shift: isize, delim: char) -> &'a str {
-        self.read_until(shift, |c| c == delim)
+        self.read_until(shift, |c, _| c == delim)
     }
 
     pub fn read_until_nonalphanumeric(&mut self, shift: isize) -> &'a str {
-        self.read_until(shift, |c| !c.is_alphanumeric())
+        self.read_until(shift, |c, _| !c.is_alphanumeric())
     }
 }
 
@@ -82,13 +83,13 @@ impl<'a> Lexer<'a> {
     fn read_num(&mut self, c: char) -> Result<Token<'a>, Error> {
         if c == '0' && self.reader.peek().to_ascii_lowercase() == 'x' {
             self.reader.advance(1);
-            let num = self.reader.read_until(0, |c| !c.is_digit(16));
+            let num = self.reader.read_until(0, |c, _| !c.is_digit(16));
 
             Ok(Token::Int(
                 isize::from_str_radix(num, 16).map_err(Error::from_err)?,
             ))
         } else {
-            let num = self.reader.read_until(-1, |c| {
+            let num = self.reader.read_until(-1, |c, _| {
                 !c.is_digit(10) && c.to_ascii_lowercase() != 'e' && c != '-' && c != '+' && c != '.'
             });
 
@@ -200,9 +201,13 @@ impl<'a> Lexer<'a> {
                 }
                 '[' => {
                     if self.reader.peek() == '[' {
-                        // Read multiline string
+                        self.reader.advance(1);
+                        let s = self
+                            .reader
+                            .read_until(0, |c, cnext| c == ']' && cnext == ']');
+                        self.reader.advance(2);
 
-                        Token::Invalid
+                        Token::Str(s)
                     } else {
                         Token::LeftSquareBracket
                     }
@@ -316,6 +321,4 @@ pub enum Token<'a> {
     Str(&'a str),
     Int(isize),
     Float(f64),
-
-    Invalid,
 }

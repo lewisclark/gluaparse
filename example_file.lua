@@ -4,4 +4,9 @@ local function foo(bob, jimmy)
 	return bob
 end
 
-foo(0.3e12, 0x40, 989, .84, 5e+20, 5e-20, 4.57e-3, +50, -50 "hello")
+foo(0.3e12, 0x40, 989, .84, 5e+20, 5e-20, 4.57e-3, +50, -50 "hello", [[yeetus
+f
+
+f
+g
+g]])
