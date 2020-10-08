@@ -152,12 +152,11 @@ impl<'a> Lexer<'a> {
         while !self.reader.eof() {
             let c = self.reader.char();
 
-            if c.is_whitespace() {
+            if c.is_whitespace() || c == ';' {
                 continue;
             }
 
             let token = match c {
-                ';' => Token::SemiColon,
                 ',' => Token::Comma,
                 '+' => {
                     if self.reader.peek().is_digit(10) {
@@ -377,7 +376,6 @@ pub enum Token<'a> {
     True,
 
     // Symbols
-    SemiColon,
     Comma,
     Equal,
     LeftCurlyBracket,
