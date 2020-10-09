@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 // This doesn't support iterating over grapheme clusters so unicode stuff probably won't be parsed nicely
 #[derive(Debug)]
-pub struct Reader<'a> {
+struct Reader<'a> {
     code: &'a [u8],
     pos: usize,
 }
@@ -351,7 +351,7 @@ impl<'a> Lexer<'a> {
 
 /* ---------- Token ---------- */
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token<'a> {
     // Keywords
     Do,

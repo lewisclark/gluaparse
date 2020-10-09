@@ -12,7 +12,7 @@ pub fn parse(code: &str) -> Result<AstNode, Error> {
 
     println!("tokens: {:?}", tokens);
 
-    let ast = AstConstructor::new(tokens).create()?.get();
+    let ast = AstConstructor::new(tokens).create()?;
 
     Ok(ast.unwrap())
 }
