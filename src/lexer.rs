@@ -102,7 +102,11 @@ impl<'a> Lexer<'a> {
                 !c.is_digit(10) && c.to_ascii_lowercase() != 'e' && c != '-' && c != '+' && c != '.'
             });
 
-            if let Some(_) = num.to_ascii_lowercase().find(|c| c == 'e' || c == '.') {
+            if num
+                .to_ascii_lowercase()
+                .find(|c| c == 'e' || c == '.')
+                .is_some()
+            {
                 Ok(Token::Float(f64::from_str(num).map_err(Error::from_err)?))
             } else {
                 Ok(Token::Int(

@@ -5,12 +5,12 @@ use std::fmt::{self, Display};
 /* ---------- Reader ---------- */
 
 struct Reader<'a> {
-    tokens: &'a Vec<Token<'a>>,
+    tokens: &'a [Token<'a>],
     pos: usize,
 }
 
 impl<'a> Reader<'a> {
-    fn new(tokens: &'a Vec<Token<'a>>) -> Self {
+    fn new(tokens: &'a [Token<'a>]) -> Self {
         Self { tokens, pos: 0 }
     }
 
@@ -21,20 +21,8 @@ impl<'a> Reader<'a> {
         t
     }
 
-    fn peek_next(&self) -> Option<&Token<'a>> {
-        self.peek_n(0)
-    }
-
-    fn peek_next_next(&self) -> Option<&Token<'a>> {
-        self.peek_n(1)
-    }
-
-    fn peek_n(&self, n: isize) -> Option<&Token<'a>> {
-        self.tokens.get((self.pos as isize + n) as usize)
-    }
-
-    fn peek_prev(&mut self) -> Option<&Token<'a>> {
-        self.peek_n(-2)
+    fn peek(&self, n: isize) -> Option<&Token<'a>> {
+        self.tokens.get((self.pos as isize + n - 1) as usize)
     }
 
     fn consume(&mut self, n: usize) {
@@ -62,7 +50,7 @@ pub struct AstConstructor<'a> {
 }
 
 impl<'a> AstConstructor<'a> {
-    pub fn new(tokens: &'a Vec<Token<'a>>) -> Self {
+    pub fn new(tokens: &'a [Token<'a>]) -> Self {
         Self {
             reader: Reader::new(tokens),
         }
@@ -75,12 +63,12 @@ impl<'a> AstConstructor<'a> {
     fn read_func(&mut self) -> Result<AstNode, Error> {
         self.reader.expect(&Token::Function)?;
 
-        let is_local = match self.reader.peek_prev() {
+        let is_local = match self.reader.peek(-1) {
             Some(t) => t == &Token::Local,
             None => false,
         };
 
-        let is_anonymous = match self.reader.peek_next() {
+        let is_anonymous = match self.reader.peek(1) {
             Some(t) => t == &Token::LeftParen,
             None => {
                 return Err(Error::new(
@@ -128,7 +116,7 @@ impl<'a> AstConstructor<'a> {
     fn read_comma_delimited(&mut self, stop_on: &Token) -> Result<Vec<AstNode>, Error> {
         let mut values = Vec::new();
 
-        while let Some(t) = self.reader.peek_next() {
+        while let Some(t) = self.reader.peek(1) {
             match t {
                 Token::Comma => {
                     self.reader.consume(1);
@@ -154,7 +142,7 @@ impl<'a> AstConstructor<'a> {
     fn read_block(&mut self, break_on_end: bool) -> Result<AstNode, Error> {
         let mut block = Vec::new();
 
-        while let Some(token) = self.reader.peek_next() {
+        while let Some(token) = self.reader.peek(1) {
             match token {
                 Token::End => {
                     if break_on_end {
@@ -168,7 +156,7 @@ impl<'a> AstConstructor<'a> {
                 }
                 Token::Function => block.push(self.read_func()?),
                 Token::Ident(_) | Token::Int(_) | Token::Float(_) => {
-                    match self.reader.peek_next_next() {
+                    match self.reader.peek(2) {
                         Some(t) => match t {
                             Token::LeftParen => block.push(self.read_call()?),
                             Token::Plus
@@ -215,7 +203,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_value(&mut self) -> Result<AstNode, Error> {
-        match self.reader.peek_next() {
+        match self.reader.peek(1) {
             Some(t) => match t {
                 Token::Function => Ok(self.read_func()?),
                 Token::Ident(_) => Ok(self.read_ident()?),
