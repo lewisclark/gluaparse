@@ -74,7 +74,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_func(&mut self) -> Result<AstNode, Error> {
-        let _is_local = match self.reader.peek_prev() {
+        let is_local = match self.reader.peek_prev() {
             Some(t) => t == &Token::Local,
             None => false,
         };
@@ -88,17 +88,18 @@ impl<'a> AstConstructor<'a> {
             }
         };
 
-        if is_anonymous {
-            let _params = self.read_params()?;
-        } else {
-            let _ident = self.read_ident()?;
-            let _params = self.read_params()?;
-        }
-
-        Err(Error::new(String::new()))
+        Ok(match is_anonymous {
+            true => AstNode::Function(Box::new(None), is_local, true, self.read_params()?),
+            false => AstNode::Function(
+                Box::new(Some(self.read_ident()?)),
+                is_local,
+                is_anonymous,
+                self.read_params()?,
+            ),
+        })
     }
 
-    fn read_params(&mut self) -> Result<AstNode, Error> {
+    fn read_params(&mut self) -> Result<Vec<AstNode>, Error> {
         self.reader.expect(&Token::LeftParen)?;
 
         let mut params = Vec::new();
@@ -116,14 +117,17 @@ impl<'a> AstConstructor<'a> {
 
         self.reader.expect(&Token::RightParen)?;
 
-        Ok(AstNode::Params(params))
+        Ok(params)
     }
 
     fn read_value(&mut self) -> Result<AstNode, Error> {
-        match self.reader.next() {
+        match self.reader.peek_next() {
             Some(t) => match t {
                 Token::Function => Ok(self.read_func()?),
                 Token::Ident(_) => Ok(self.read_ident()?),
+                Token::Str(_) => Ok(self.read_str()?),
+                Token::Int(_) => Ok(self.read_int()?),
+                Token::Float(_) => Ok(self.read_float()?),
                 t => Err(Error::new(format!("Expected value, found {:?}", t))),
             },
             None => Err(Error::new("Expected value, found eof".to_string())),
@@ -136,10 +140,46 @@ impl<'a> AstConstructor<'a> {
                 Token::Ident(s) => Ok(s),
                 t => Err(Error::new(format!("Expected identifier, found {:?}", t))),
             },
-            None => Err(Error::new("Expected identifier, found None".to_string())),
+            None => Err(Error::new("Expected identifier, found eof".to_string())),
         }?;
 
         Ok(AstNode::Ident(ident.to_string()))
+    }
+
+    fn read_str(&mut self) -> Result<AstNode, Error> {
+        let s = match self.reader.next() {
+            Some(t) => match t {
+                Token::Str(s) => Ok(s),
+                t => Err(Error::new(format!("Expected string, found {:?}", t))),
+            },
+            None => Err(Error::new("Expected string, found eof".to_string())),
+        }?;
+
+        Ok(AstNode::Str(s.to_string()))
+    }
+
+    fn read_int(&mut self) -> Result<AstNode, Error> {
+        let n = match self.reader.next() {
+            Some(t) => match t {
+                Token::Int(n) => Ok(n),
+                t => Err(Error::new(format!("Expected int, found {:?}", t))),
+            },
+            None => Err(Error::new("Expected int, found eof".to_string())),
+        }?;
+
+        Ok(AstNode::Int(*n))
+    }
+
+    fn read_float(&mut self) -> Result<AstNode, Error> {
+        let f = match self.reader.next() {
+            Some(t) => match t {
+                Token::Float(n) => Ok(n),
+                t => Err(Error::new(format!("Expected float, found {:?}", t))),
+            },
+            None => Err(Error::new("Expected float, found eof".to_string())),
+        }?;
+
+        Ok(AstNode::Float(*f))
     }
 }
 
@@ -148,10 +188,14 @@ impl<'a> AstConstructor<'a> {
 #[derive(Debug)]
 pub enum AstNode {
     Chunk(Vec<AstNode>),
-    Function,
+
+    /* ident, is_local, is_anonymous, params */
+    Function(Box<Option<AstNode>>, bool, bool, Vec<AstNode>),
     Statement,
     Ident(String),
-    Params(Vec<AstNode>),
+    Str(String),
+    Int(isize),
+    Float(f64),
     Invalid,
 }
 
