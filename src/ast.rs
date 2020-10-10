@@ -22,11 +22,19 @@ impl<'a> Reader<'a> {
     }
 
     fn peek_next(&self) -> Option<&Token<'a>> {
-        self.tokens.get(self.pos)
+        self.peek_n(0)
+    }
+
+    fn peek_next_next(&self) -> Option<&Token<'a>> {
+        self.peek_n(1)
+    }
+
+    fn peek_n(&self, n: isize) -> Option<&Token<'a>> {
+        self.tokens.get((self.pos as isize + n) as usize)
     }
 
     fn peek_prev(&mut self) -> Option<&Token<'a>> {
-        self.tokens.get(self.pos - 2)
+        self.peek_n(-2)
     }
 
     fn consume(&mut self, n: usize) {
@@ -148,11 +156,51 @@ impl<'a> AstConstructor<'a> {
                     block.push(self.read_block(true)?)
                 }
                 Token::Function => block.push(self.read_func()?),
+                Token::Ident(_) | Token::Int(_) | Token::Float(_) => {
+                    match self.reader.peek_next_next() {
+                        Some(t) => match t {
+                            Token::LeftParen => block.push(self.read_call()?),
+                            Token::Plus
+                            | Token::Minus
+                            | Token::Asterisk
+                            | Token::Slash
+                            | Token::Caret
+                            | Token::Percent
+                            | Token::DotDot => (), //self.read_binop()?,
+                            Token::LeftAngleBracket
+                            | Token::LeftAngleBracketEqual
+                            | Token::RightAngleBracket
+                            | Token::RightAngleBracketEqual
+                            | Token::EqualEqual
+                            | Token::NotEqual => (), //self.read_comparisonop()?,
+                            Token::And | Token::Or => (), //self.read_logicalop()?,
+                            Token::Not | Token::Hashtag => (), //self.read_unaryop()?,
+                            t => {
+                                return Err(Error::new(format!(
+                                    "Unexpected token {:?} after identifier",
+                                    t
+                                )))
+                            }
+                        },
+                        None => {
+                            return Err(Error::new(
+                                "Expected token after identifier, found eof".to_string(),
+                            ))
+                        }
+                    }
+                }
                 _ => self.reader.consume(1),
             };
         }
 
         Ok(AstNode::Block(block))
+    }
+
+    fn read_call(&mut self) -> Result<AstNode, Error> {
+        let ident = self.read_ident()?;
+        let params = self.read_params()?;
+
+        Ok(AstNode::Call(Box::new(ident), params))
     }
 
     fn read_value(&mut self) -> Result<AstNode, Error> {
@@ -226,6 +274,10 @@ pub enum AstNode {
 
     /* ident, is_local, is_anonymous, params, body */
     Function(Box<Option<AstNode>>, bool, bool, Vec<AstNode>, Box<AstNode>),
+
+    /* ident, params */
+    Call(Box<AstNode>, Vec<AstNode>),
+
     Statement,
     Ident(String),
     Str(String),
