@@ -118,22 +118,33 @@ impl<'a> AstConstructor<'a> {
     fn read_params(&mut self) -> Result<Vec<AstNode>, Error> {
         self.reader.expect(&Token::LeftParen)?;
 
-        let mut params = Vec::new();
-
-        while let Some(t) = self.reader.peek_next() {
-            match t {
-                Token::RightParen => break,
-                Token::Comma => {
-                    self.reader.consume(1);
-                    continue;
-                }
-                _ => params.push(self.read_value()?),
-            };
-        }
+        let params = self.read_comma_delimited(&Token::RightParen)?;
 
         self.reader.expect(&Token::RightParen)?;
 
         Ok(params)
+    }
+
+    fn read_comma_delimited(&mut self, stop_on: &Token) -> Result<Vec<AstNode>, Error> {
+        let mut values = Vec::new();
+
+        while let Some(t) = self.reader.peek_next() {
+            match t {
+                Token::Comma => {
+                    self.reader.consume(1);
+                    continue;
+                }
+                t => {
+                    if t == stop_on {
+                        break;
+                    } else {
+                        values.push(self.read_value()?);
+                    }
+                }
+            };
+        }
+
+        Ok(values)
     }
 
     fn read_chunk(&mut self) -> Result<AstNode, Error> {
