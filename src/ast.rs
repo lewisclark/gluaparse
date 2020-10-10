@@ -61,7 +61,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     pub fn create(mut self) -> Result<Option<AstNode>, Error> {
-        Ok(Some(self.read_block()?))
+        Ok(Some(self.read_chunk()?))
     }
 
     fn read_func(&mut self) -> Result<AstNode, Error> {
@@ -83,7 +83,7 @@ impl<'a> AstConstructor<'a> {
 
         if is_anonymous {
             let params = self.read_params()?;
-            let body = Box::new(self.read_block()?);
+            let body = Box::new(self.read_block(true)?);
 
             Ok(AstNode::Function(
                 Box::new(None),
@@ -95,7 +95,7 @@ impl<'a> AstConstructor<'a> {
         } else {
             let ident = self.read_ident()?;
             let params = self.read_params()?;
-            let body = Box::new(self.read_block()?);
+            let body = Box::new(self.read_block(true)?);
 
             Ok(AstNode::Function(
                 Box::new(Some(ident)),
@@ -128,11 +128,25 @@ impl<'a> AstConstructor<'a> {
         Ok(params)
     }
 
-    fn read_block(&mut self) -> Result<AstNode, Error> {
+    fn read_chunk(&mut self) -> Result<AstNode, Error> {
+        self.read_block(false)
+    }
+
+    fn read_block(&mut self, break_on_end: bool) -> Result<AstNode, Error> {
         let mut block = Vec::new();
 
         while let Some(token) = self.reader.peek_next() {
             match token {
+                Token::End => {
+                    if break_on_end {
+                        self.reader.consume(1);
+                        break;
+                    }
+                }
+                Token::Do => {
+                    self.reader.consume(1);
+                    block.push(self.read_block(true)?)
+                }
                 Token::Function => block.push(self.read_func()?),
                 _ => self.reader.consume(1),
             };
