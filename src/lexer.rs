@@ -351,7 +351,7 @@ impl<'a> Lexer<'a> {
 
 /* ---------- Token ---------- */
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Token<'a> {
     // Keywords
     Do,
@@ -413,4 +413,10 @@ pub enum Token<'a> {
     Int(isize),
     Float(f64),
     Comment(&'a str),
+}
+
+impl<'a> PartialEq for Token<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
 }
