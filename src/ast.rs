@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::lexer::Token;
+use std::convert::From;
 use std::fmt::{self, Display};
 
 /* ---------- Reader ---------- */
@@ -155,39 +156,13 @@ impl<'a> AstConstructor<'a> {
                     block.push(self.read_block(true)?)
                 }
                 Token::Function => block.push(self.read_func()?),
-                Token::Ident(_) | Token::Int(_) | Token::Float(_) => {
-                    match self.reader.peek(2) {
-                        Some(t) => match t {
-                            Token::LeftParen => block.push(self.read_call()?),
-                            Token::Plus
-                            | Token::Minus
-                            | Token::Asterisk
-                            | Token::Slash
-                            | Token::Caret
-                            | Token::Percent
-                            | Token::DotDot => (), //self.read_binop()?,
-                            Token::LeftAngleBracket
-                            | Token::LeftAngleBracketEqual
-                            | Token::RightAngleBracket
-                            | Token::RightAngleBracketEqual
-                            | Token::EqualEqual
-                            | Token::NotEqual => (), //self.read_comparisonop()?,
-                            Token::And | Token::Or => (), //self.read_logicalop()?,
-                            Token::Not | Token::Hashtag => (), //self.read_unaryop()?,
-                            t => {
-                                return Err(Error::new(format!(
-                                    "Unexpected token {:?} after identifier",
-                                    t
-                                )))
-                            }
-                        },
-                        None => {
-                            return Err(Error::new(
-                                "Expected token after identifier, found eof".to_string(),
-                            ))
-                        }
-                    }
-                }
+                Token::Ident(_) | Token::Int(_) | Token::Float(_) => match self.reader.peek(2) {
+                    Some(t) => match t {
+                        Token::LeftParen => block.push(self.read_call()?),
+                        _ => self.reader.consume(1),
+                    },
+                    None => self.reader.consume(1),
+                },
                 _ => self.reader.consume(1),
             };
         }
@@ -267,7 +242,7 @@ impl<'a> AstConstructor<'a> {
 
 /* ---------- AstNode ---------- */
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AstNode {
     Block(Vec<AstNode>),
 
@@ -287,6 +262,63 @@ pub enum AstNode {
 
 impl Display for AstNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        let mut buf = Vec::new();
+        ptree::write_tree(self, std::io::Cursor::new(&mut buf)).unwrap();
+
+        write!(f, "{}", std::str::from_utf8(&buf).unwrap())
+    }
+}
+
+impl ptree::item::TreeItem for AstNode {
+    type Child = AstNode;
+
+    fn write_self<W: std::io::Write>(
+        &self,
+        f: &mut W,
+        _style: &ptree::style::Style,
+    ) -> std::io::Result<()> {
+        match self {
+            AstNode::Block(_) => write!(f, "{}", "Block"),
+            AstNode::Function(ident, is_local, _, params, _) => write!(
+                f,
+                "Function {} {} {:?}",
+                match &**ident {
+                    Some(ident) => match ident {
+                        AstNode::Ident(name) => name,
+                        _ => "<error>",
+                    },
+                    None => "<anonymous>",
+                },
+                match is_local {
+                    true => "local",
+                    false => "non-local",
+                },
+                params,
+            ),
+            AstNode::Call(ident, params) => write!(
+                f,
+                "Call {} {:?}",
+                match &**ident {
+                    AstNode::Ident(name) => name,
+                    _ => "<error>",
+                },
+                params,
+            ),
+            AstNode::Ident(name) => write!(f, "Ident {}", name),
+            AstNode::Str(s) => write!(f, "Str {}", s),
+            AstNode::Int(i) => write!(f, "Int {}", i),
+            AstNode::Float(fl) => write!(f, "Float {}", fl),
+            _ => write!(f, "{}", "<unknown>"),
+        }
+    }
+
+    fn children(&self) -> std::borrow::Cow<[Self::Child]> {
+        let v = match self {
+            AstNode::Block(v) => v.clone(),
+            AstNode::Function(_, _, _, _, body) => vec![*body.clone()],
+            _ => vec![],
+        };
+
+        std::borrow::Cow::from(v)
     }
 }

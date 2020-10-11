@@ -13,3 +13,4 @@ doc = false
 
 [dependencies]
 clap = "2.33.3"
+ptree = "0.3.0"
