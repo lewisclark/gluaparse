@@ -82,25 +82,15 @@ impl<'a> AstConstructor<'a> {
             let params = self.read_params()?;
             let body = Box::new(self.read_block(true)?);
 
-            Ok(AstNode::Function(
-                Box::new(None),
-                is_local,
-                true,
-                params,
-                body,
-            ))
+            Ok(AstNode::Function(params, body))
         } else {
-            let ident = self.read_ident()?;
+            let ident = self.read_variable(Some(is_local))?;
             let params = self.read_params()?;
             let body = Box::new(self.read_block(true)?);
 
-            Ok(AstNode::Function(
-                Box::new(Some(ident)),
-                is_local,
-                is_anonymous,
-                params,
-                body,
-            ))
+            let func = AstNode::Function(params, body);
+
+            Ok(AstNode::Assignment(Box::new(ident), Box::new(func)))
         }
     }
 
@@ -171,10 +161,10 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_call(&mut self) -> Result<AstNode, Error> {
-        let ident = self.read_ident()?;
+        let variable = self.read_variable(None)?;
         let params = self.read_params()?;
 
-        Ok(AstNode::Call(Box::new(ident), params))
+        Ok(AstNode::Call(Box::new(variable), params))
     }
 
     fn read_value(&mut self) -> Result<AstNode, Error> {
@@ -201,6 +191,23 @@ impl<'a> AstConstructor<'a> {
         }?;
 
         Ok(AstNode::Ident(ident.to_string()))
+    }
+
+    fn read_variable(&mut self, is_local: Option<bool>) -> Result<AstNode, Error> {
+        let ident = self.read_ident()?;
+
+        let is_local = match is_local {
+            Some(b) => b,
+            None => match self.reader.peek(-2) {
+                Some(t) => match t {
+                    Token::Local => true,
+                    _ => false,
+                },
+                None => false,
+            },
+        };
+
+        Ok(AstNode::Variable(Box::new(ident), is_local))
     }
 
     fn read_str(&mut self) -> Result<AstNode, Error> {
@@ -246,14 +253,21 @@ impl<'a> AstConstructor<'a> {
 pub enum AstNode {
     Block(Vec<AstNode>),
 
-    /* ident, is_local, is_anonymous, params, body */
-    Function(Box<Option<AstNode>>, bool, bool, Vec<AstNode>, Box<AstNode>),
+    /* params, body */
+    Function(Vec<AstNode>, Box<AstNode>),
 
-    /* ident, params */
+    /* variable, params */
     Call(Box<AstNode>, Vec<AstNode>),
 
-    Statement,
+    /* ident, value */
+    Assignment(Box<AstNode>, Box<AstNode>),
+
+    /* name */
     Ident(String),
+
+    /* ident, is_local */
+    Variable(Box<AstNode>, bool),
+
     Str(String),
     Int(isize),
     Float(f64),
@@ -279,32 +293,28 @@ impl ptree::item::TreeItem for AstNode {
     ) -> std::io::Result<()> {
         match self {
             AstNode::Block(_) => write!(f, "{}", "Block"),
-            AstNode::Function(ident, is_local, _, params, _) => write!(
+            AstNode::Function(params, _body) => write!(f, "Function {:?}", params,),
+            AstNode::Call(_variable, _params) => write!(
                 f,
-                "Function {} {} {:?}",
-                match &**ident {
-                    Some(ident) => match ident {
-                        AstNode::Ident(name) => name,
-                        _ => "<error>",
-                    },
-                    None => "<anonymous>",
-                },
+                "Call",
+            ),
+            AstNode::Assignment(_ident, _value) => write!(
+                f,
+                "Assignment",
+            ),
+            AstNode::Ident(name) => write!(
+                f,
+                "Ident {}",
+                name,
+            ),
+            AstNode::Variable(_name, is_local) => write!(
+                f,
+                "Variable ({})",
                 match is_local {
                     true => "local",
                     false => "non-local",
                 },
-                params,
             ),
-            AstNode::Call(ident, params) => write!(
-                f,
-                "Call {} {:?}",
-                match &**ident {
-                    AstNode::Ident(name) => name,
-                    _ => "<error>",
-                },
-                params,
-            ),
-            AstNode::Ident(name) => write!(f, "Ident {}", name),
             AstNode::Str(s) => write!(f, "Str {}", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
@@ -315,7 +325,10 @@ impl ptree::item::TreeItem for AstNode {
     fn children(&self) -> std::borrow::Cow<[Self::Child]> {
         let v = match self {
             AstNode::Block(v) => v.clone(),
-            AstNode::Function(_, _, _, _, body) => vec![*body.clone()],
+            AstNode::Function(_params, body) => vec![*body.clone()],
+            AstNode::Call(variable, _params) => vec![*variable.clone()],
+            AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
+            AstNode::Variable(name, _is_local) => vec![*name.clone()],
             _ => vec![],
         };
 
