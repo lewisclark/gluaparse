@@ -80,13 +80,13 @@ impl<'a> AstConstructor<'a> {
 
         if is_anonymous {
             let params = self.read_params()?;
-            let body = Box::new(self.read_block(true)?);
+            let body = Box::new(self.read_block(|t| t == &Token::End)?);
 
             Ok(AstNode::Function(params, body))
         } else {
             let ident = self.read_variable(Some(is_local))?;
             let params = self.read_params()?;
-            let body = Box::new(self.read_block(true)?);
+            let body = Box::new(self.read_block(|t| t == &Token::End)?);
 
             let func = AstNode::Function(params, body);
 
@@ -117,7 +117,7 @@ impl<'a> AstConstructor<'a> {
                     if t == stop_on {
                         break;
                     } else {
-                        values.push(self.read_value()?);
+                        values.push(self.read_expression()?);
                     }
                 }
             };
@@ -127,33 +127,35 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_chunk(&mut self) -> Result<AstNode, Error> {
-        self.read_block(false)
+        self.read_block(|_| false)
     }
 
-    fn read_block(&mut self, break_on_end: bool) -> Result<AstNode, Error> {
+    fn read_block<F>(&mut self, breaker: F) -> Result<AstNode, Error>
+    where
+        F: Fn(&Token<'_>) -> bool,
+    {
         let mut block = Vec::new();
 
         while let Some(token) = self.reader.peek(1) {
             match token {
-                Token::End => {
-                    if break_on_end {
-                        self.reader.consume(1);
-                        break;
-                    }
-                }
-                Token::Do => {
-                    self.reader.consume(1);
-                    block.push(self.read_block(true)?)
-                }
+                Token::Do => unimplemented!(),
                 Token::Function => block.push(self.read_func()?),
-                Token::Ident(_) | Token::Int(_) | Token::Float(_) => match self.reader.peek(2) {
+                Token::Ident(_) => match self.reader.peek(2) {
                     Some(t) => match t {
                         Token::LeftParen => block.push(self.read_call()?),
-                        _ => self.reader.consume(1),
+                        _ => (),
                     },
-                    None => self.reader.consume(1),
+                    None => (),
                 },
-                _ => self.reader.consume(1),
+                Token::If => block.push(self.read_if()?),
+                t => {
+                    if breaker(t) {
+                        self.reader.consume(1);
+                        break;
+                    } else {
+                        self.reader.consume(1);
+                    }
+                }
             };
         }
 
@@ -167,17 +169,30 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Call(Box::new(variable), params))
     }
 
-    fn read_value(&mut self) -> Result<AstNode, Error> {
+    fn read_expression(&mut self) -> Result<AstNode, Error> {
         match self.reader.peek(1) {
             Some(t) => match t {
-                Token::Function => Ok(self.read_func()?),
-                Token::Ident(_) => Ok(self.read_ident()?),
-                Token::Str(_) => Ok(self.read_str()?),
-                Token::Int(_) => Ok(self.read_int()?),
-                Token::Float(_) => Ok(self.read_float()?),
+                Token::Function => self.read_func(),
+                Token::Ident(_) => self.read_ident(),
+                Token::Str(_) => self.read_str(),
+                Token::Int(_) => self.read_int(),
+                Token::Float(_) => self.read_float(),
+                Token::True => self.read_bool(),
+                Token::False => self.read_bool(),
                 t => Err(Error::new(format!("Expected value, found {:?}", t))),
             },
             None => Err(Error::new("Expected value, found eof".to_string())),
+        }
+    }
+
+    fn read_bool(&mut self) -> Result<AstNode, Error> {
+        match self.reader.next() {
+            Some(t) => match t {
+                Token::True => Ok(AstNode::Bool(true)),
+                Token::False => Ok(AstNode::Bool(false)),
+                t => Err(Error::new(format!("Expected Bool, found {:?}", t))),
+            },
+            None => Err(Error::new("Expected Bool, found eof".to_string())),
         }
     }
 
@@ -245,6 +260,31 @@ impl<'a> AstConstructor<'a> {
 
         Ok(AstNode::Float(*f))
     }
+
+    fn read_if(&mut self) -> Result<AstNode, Error> {
+        self.reader.expect(&Token::If)?;
+        let expr = self.read_expression()?;
+        self.reader.expect(&Token::Then)?;
+
+        let block_true = self.read_block(|t| match t {
+            Token::End | Token::Else | Token::ElseIf => true,
+            _ => false,
+        })?;
+
+        match self.reader.peek(0) {
+            Some(t) => match t {
+                Token::End => Ok(AstNode::If(Box::new(expr), Box::new(block_true), None)),
+                Token::Else | Token::ElseIf => unimplemented!(),
+                t => Err(Error::new(format!(
+                    "Expected End, Else or ElseIf, found {:?}",
+                    t
+                ))),
+            },
+            None => Err(Error::new(
+                "Expected End, Else or ElseIf, found eof".to_string(),
+            )),
+        }
+    }
 }
 
 /* ---------- AstNode ---------- */
@@ -268,9 +308,18 @@ pub enum AstNode {
     /* ident, is_local */
     Variable(Box<AstNode>, bool),
 
+    Expression(Box<AstNode>),
+
+    /* cond, block, else_block */
+    If(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
+
+    /* vec_if_stmts, else_block */
+    IfElseIf(Vec<AstNode>, Option<Box<AstNode>>),
+
     Str(String),
     Int(isize),
     Float(f64),
+    Bool(bool),
     Invalid,
 }
 
@@ -294,19 +343,9 @@ impl ptree::item::TreeItem for AstNode {
         match self {
             AstNode::Block(_) => write!(f, "{}", "Block"),
             AstNode::Function(params, _body) => write!(f, "Function {:?}", params,),
-            AstNode::Call(_variable, _params) => write!(
-                f,
-                "Call",
-            ),
-            AstNode::Assignment(_ident, _value) => write!(
-                f,
-                "Assignment",
-            ),
-            AstNode::Ident(name) => write!(
-                f,
-                "Ident {}",
-                name,
-            ),
+            AstNode::Call(_variable, _params) => write!(f, "Call",),
+            AstNode::Assignment(_ident, _value) => write!(f, "Assignment",),
+            AstNode::Ident(name) => write!(f, "Ident {}", name,),
             AstNode::Variable(_name, is_local) => write!(
                 f,
                 "Variable ({})",
