@@ -73,7 +73,7 @@ impl<'a> AstConstructor<'a> {
             Some(t) => t == &Token::LeftParen,
             None => {
                 return Err(Error::new(
-                    "Expected '(' or identifier after 'function'".to_string(),
+                    "Expected '(' or identifier after 'function', found eof".to_string(),
                 ))
             }
         };
@@ -140,13 +140,14 @@ impl<'a> AstConstructor<'a> {
         while let Some(token) = self.reader.peek(0) {
             match token {
                 Token::Do => unimplemented!(),
+                Token::Local => self.reader.consume(1),
                 Token::Function => block.push(self.read_func()?),
                 Token::Ident(_) => match self.reader.peek(1) {
                     Some(t) => match t {
                         Token::LeftParen => block.push(self.read_call()?),
-                        _ => (),
+                        _ => unimplemented!(),
                     },
-                    None => (),
+                    None => unimplemented!(),
                 },
                 Token::If => block.push(self.read_if()?),
                 t => {
@@ -154,7 +155,7 @@ impl<'a> AstConstructor<'a> {
                         self.reader.consume(1);
                         break;
                     } else {
-                        self.reader.consume(1);
+                        unimplemented!();
                     }
                 }
             };
