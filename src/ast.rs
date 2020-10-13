@@ -23,7 +23,7 @@ impl<'a> Reader<'a> {
     }
 
     fn peek(&self, n: isize) -> Option<&Token<'a>> {
-        self.tokens.get((self.pos as isize + n - 1) as usize)
+        self.tokens.get((self.pos as isize + n) as usize)
     }
 
     fn consume(&mut self, n: usize) {
@@ -64,12 +64,12 @@ impl<'a> AstConstructor<'a> {
     fn read_func(&mut self) -> Result<AstNode, Error> {
         self.reader.expect(&Token::Function)?;
 
-        let is_local = match self.reader.peek(-1) {
+        let is_local = match self.reader.peek(-2) {
             Some(t) => t == &Token::Local,
             None => false,
         };
 
-        let is_anonymous = match self.reader.peek(1) {
+        let is_anonymous = match self.reader.peek(0) {
             Some(t) => t == &Token::LeftParen,
             None => {
                 return Err(Error::new(
@@ -108,7 +108,7 @@ impl<'a> AstConstructor<'a> {
     {
         let mut exprs = Vec::new();
 
-        while let Some(t) = self.reader.peek(1) {
+        while let Some(t) = self.reader.peek(0) {
             match t {
                 Token::Comma => {
                     self.reader.consume(1);
@@ -137,11 +137,11 @@ impl<'a> AstConstructor<'a> {
     {
         let mut block = Vec::new();
 
-        while let Some(token) = self.reader.peek(1) {
+        while let Some(token) = self.reader.peek(0) {
             match token {
                 Token::Do => unimplemented!(),
                 Token::Function => block.push(self.read_func()?),
-                Token::Ident(_) => match self.reader.peek(2) {
+                Token::Ident(_) => match self.reader.peek(1) {
                     Some(t) => match t {
                         Token::LeftParen => block.push(self.read_call()?),
                         _ => (),
@@ -171,7 +171,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_expression(&mut self) -> Result<AstNode, Error> {
-        match self.reader.peek(1) {
+        match self.reader.peek(0) {
             Some(t) => match t {
                 Token::Function => self.read_func(),
                 Token::Ident(_) => self.read_ident(),
@@ -214,7 +214,7 @@ impl<'a> AstConstructor<'a> {
 
         let is_local = match is_local {
             Some(b) => b,
-            None => match self.reader.peek(-2) {
+            None => match self.reader.peek(-3) {
                 Some(t) => match t {
                     Token::Local => true,
                     _ => false,
@@ -272,7 +272,7 @@ impl<'a> AstConstructor<'a> {
             _ => false,
         })?;
 
-        match self.reader.peek(0) {
+        match self.reader.peek(-1) {
             Some(t) => match t {
                 Token::End => Ok(AstNode::If(Box::new(expr), Box::new(block_true), None)),
                 Token::Else | Token::ElseIf => unimplemented!(),
