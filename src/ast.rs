@@ -3,6 +3,18 @@ use crate::lexer::Token;
 use std::convert::From;
 use std::fmt::{self, Display};
 
+macro_rules! expect {
+    ( $found:expr, $expected_str:expr, $( $expected:pat ),+ ) => {
+        match $found {
+            Some(t) => match t {
+                $( $expected => Ok(t), )*
+                t => Err(Error::new(format!("Expected {:?}, found {:?}", $expected_str, t))),
+            },
+            None => Err(Error::new(format!("Expected {:?}, found eof", $expected_str))),
+        }
+    };
+}
+
 /* ---------- Reader ---------- */
 
 struct Reader<'a> {
@@ -29,19 +41,6 @@ impl<'a> Reader<'a> {
     fn consume(&mut self, n: usize) {
         self.pos += n;
     }
-
-    fn expect(&mut self, val: &Token<'a>) -> Result<&Token<'a>, Error> {
-        match self.next() {
-            Some(t) => {
-                if t == val {
-                    Ok(t)
-                } else {
-                    Err(Error::new(format!("Expected {:?}, found {:?}", val, t)))
-                }
-            }
-            None => Err(Error::new(format!("Expected {:?}, found eof", val))),
-        }
-    }
 }
 
 /* ---------- AstConstructor ---------- */
@@ -62,21 +61,20 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_func(&mut self) -> Result<AstNode, Error> {
-        self.reader.expect(&Token::Function)?;
+        expect!(self.reader.next(), "Function", Token::Function)?;
 
         let is_local = match self.reader.peek(-2) {
             Some(t) => t == &Token::Local,
             None => false,
         };
 
-        let is_anonymous = match self.reader.peek(0) {
-            Some(t) => t == &Token::LeftParen,
-            None => {
-                return Err(Error::new(
-                    "Expected '(' or identifier after 'function', found eof".to_string(),
-                ))
-            }
-        };
+        expect!(
+            self.reader.peek(0),
+            "LeftParen or Ident",
+            Token::LeftParen,
+            Token::Ident(_)
+        )?;
+        let is_anonymous = self.reader.peek(0).unwrap() == &Token::LeftParen;
 
         if is_anonymous {
             let params = self.read_params()?;
@@ -95,9 +93,9 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_params(&mut self) -> Result<Vec<AstNode>, Error> {
-        self.reader.expect(&Token::LeftParen)?;
+        expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
         let params = self.read_comma_delimited(|t| t == &Token::RightParen)?;
-        self.reader.expect(&Token::RightParen)?;
+        expect!(self.reader.next(), "RightParen", Token::RightParen)?;
 
         Ok(params)
     }
@@ -161,7 +159,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_return(&mut self) -> Result<AstNode, Error> {
-        self.reader.expect(&Token::Return)?;
+        expect!(self.reader.next(), "Return", Token::Return)?;
 
         Ok(AstNode::Return(Box::new(self.read_expression()?)))
     }
@@ -218,24 +216,20 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_bool(&mut self) -> Result<AstNode, Error> {
-        match self.reader.next() {
-            Some(t) => match t {
-                Token::True => Ok(AstNode::Bool(true)),
-                Token::False => Ok(AstNode::Bool(false)),
-                t => Err(Error::new(format!("Expected Bool, found {:?}", t))),
-            },
-            None => Err(Error::new("Expected Bool, found eof".to_string())),
+        let t = expect!(self.reader.next(), "Bool", Token::True, Token::False)?;
+
+        match t {
+            Token::True => Ok(AstNode::Bool(true)),
+            Token::False => Ok(AstNode::Bool(false)),
+            _ => panic!(),
         }
     }
 
     fn read_ident(&mut self) -> Result<AstNode, Error> {
-        let ident = match self.reader.next() {
-            Some(t) => match t {
-                Token::Ident(s) => Ok(s),
-                t => Err(Error::new(format!("Expected identifier, found {:?}", t))),
-            },
-            None => Err(Error::new("Expected identifier, found eof".to_string())),
-        }?;
+        let ident = match expect!(self.reader.next(), "Ident", Token::Ident(_))? {
+            Token::Ident(s) => s,
+            _ => panic!(),
+        };
 
         Ok(AstNode::Ident(ident.to_string()))
     }
@@ -258,63 +252,52 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_str(&mut self) -> Result<AstNode, Error> {
-        let s = match self.reader.next() {
-            Some(t) => match t {
-                Token::Str(s) => Ok(s),
-                t => Err(Error::new(format!("Expected string, found {:?}", t))),
-            },
-            None => Err(Error::new("Expected string, found eof".to_string())),
-        }?;
+        let s = match expect!(self.reader.next(), "Str", Token::Str(_))? {
+            Token::Str(s) => s,
+            _ => panic!(),
+        };
 
         Ok(AstNode::Str(s.to_string()))
     }
 
     fn read_int(&mut self) -> Result<AstNode, Error> {
-        let n = match self.reader.next() {
-            Some(t) => match t {
-                Token::Int(n) => Ok(n),
-                t => Err(Error::new(format!("Expected int, found {:?}", t))),
-            },
-            None => Err(Error::new("Expected int, found eof".to_string())),
-        }?;
+        let n = match expect!(self.reader.next(), "Int", Token::Int(_))? {
+            Token::Int(n) => n,
+            _ => panic!(),
+        };
 
         Ok(AstNode::Int(*n))
     }
 
     fn read_float(&mut self) -> Result<AstNode, Error> {
-        let f = match self.reader.next() {
-            Some(t) => match t {
-                Token::Float(n) => Ok(n),
-                t => Err(Error::new(format!("Expected float, found {:?}", t))),
-            },
-            None => Err(Error::new("Expected float, found eof".to_string())),
-        }?;
+        let f = match expect!(self.reader.next(), "Float", Token::Float(_))? {
+            Token::Float(f) => f,
+            _ => panic!(),
+        };
 
         Ok(AstNode::Float(*f))
     }
 
     fn read_if(&mut self) -> Result<AstNode, Error> {
-        self.reader.expect(&Token::If)?;
+        expect!(self.reader.next(), "If", Token::If)?;
         let expr = self.read_expression()?;
-        self.reader.expect(&Token::Then)?;
+        expect!(self.reader.next(), "Then", Token::Then)?;
 
         let block_true = self.read_block(|t| match t {
             Token::End | Token::Else | Token::ElseIf => true,
             _ => false,
         })?;
 
-        match self.reader.peek(-1) {
-            Some(t) => match t {
-                Token::End => Ok(AstNode::If(Box::new(expr), Box::new(block_true), None)),
-                Token::Else | Token::ElseIf => unimplemented!(),
-                t => Err(Error::new(format!(
-                    "Expected End, Else or ElseIf, found {:?}",
-                    t
-                ))),
-            },
-            None => Err(Error::new(
-                "Expected End, Else or ElseIf, found eof".to_string(),
-            )),
+        match expect!(
+            self.reader.peek(-1),
+            "End, Else or ElseIf",
+            Token::End,
+            Token::Else,
+            Token::ElseIf
+        )? {
+            Token::End => Ok(AstNode::If(Box::new(expr), Box::new(block_true), None)),
+            Token::Else | Token::ElseIf => unimplemented!(),
+            _ => panic!(),
         }
     }
 }
