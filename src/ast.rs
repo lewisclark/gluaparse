@@ -149,6 +149,7 @@ impl<'a> AstConstructor<'a> {
                     },
                     None => unimplemented!(),
                 },
+                Token::Return => block.push(self.read_return()?),
                 Token::If => block.push(self.read_if()?),
                 t => {
                     if breaker(t) {
@@ -164,6 +165,12 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Block(block))
     }
 
+    fn read_return(&mut self) -> Result<AstNode, Error> {
+        self.reader.expect(&Token::Return)?;
+
+        Ok(AstNode::Return(Box::new(self.read_expression()?)))
+    }
+
     fn read_call(&mut self) -> Result<AstNode, Error> {
         let variable = self.read_variable(None)?;
         let params = self.read_params()?;
@@ -172,7 +179,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_expression(&mut self) -> Result<AstNode, Error> {
-        match self.reader.peek(0) {
+        let val = match self.reader.peek(0) {
             Some(t) => match t {
                 Token::Function => self.read_func(),
                 Token::Ident(_) => self.read_ident(),
@@ -184,7 +191,9 @@ impl<'a> AstConstructor<'a> {
                 t => Err(Error::new(format!("Expected value, found {:?}", t))),
             },
             None => Err(Error::new("Expected value, found eof".to_string())),
-        }
+        };
+
+        Ok(AstNode::Expression(Box::new(val?)))
     }
 
     fn read_bool(&mut self) -> Result<AstNode, Error> {
@@ -310,7 +319,11 @@ pub enum AstNode {
     /* ident, is_local */
     Variable(Box<AstNode>, bool),
 
+    /* expr */
     Expression(Box<AstNode>),
+
+    /* expr */
+    Return(Box<AstNode>),
 
     /* cond, block, else_block */
     If(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
@@ -344,10 +357,10 @@ impl ptree::item::TreeItem for AstNode {
     ) -> std::io::Result<()> {
         match self {
             AstNode::Block(_) => write!(f, "{}", "Block"),
-            AstNode::Function(params, _body) => write!(f, "Function {:?}", params,),
-            AstNode::Call(_variable, _params) => write!(f, "Call",),
-            AstNode::Assignment(_ident, _value) => write!(f, "Assignment",),
-            AstNode::Ident(name) => write!(f, "Ident {}", name,),
+            AstNode::Function(params, _body) => write!(f, "Function {:?}", params),
+            AstNode::Call(_variable, _params) => write!(f, "Call"),
+            AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
+            AstNode::Ident(name) => write!(f, "Ident {}", name),
             AstNode::Variable(_name, is_local) => write!(
                 f,
                 "Variable ({})",
@@ -356,9 +369,13 @@ impl ptree::item::TreeItem for AstNode {
                     false => "non-local",
                 },
             ),
+            AstNode::Expression(_expr) => write!(f, "Expression"),
+            AstNode::Return(_expr) => write!(f, "Return"),
+            AstNode::If(_cond, _block, _else_block) => write!(f, "If"),
             AstNode::Str(s) => write!(f, "Str {}", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
+            AstNode::Bool(b) => write!(f, "Bool {}", b),
             _ => write!(f, "{}", "<unknown>"),
         }
     }
@@ -370,6 +387,15 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Call(variable, _params) => vec![*variable.clone()],
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
             AstNode::Variable(name, _is_local) => vec![*name.clone()],
+            AstNode::Expression(expr) => vec![*expr.clone()],
+            AstNode::Return(expr) => vec![*expr.clone()],
+            AstNode::If(cond, block, else_block) => {
+                if let Some(else_block) = else_block {
+                    vec![*cond.clone(), *block.clone(), *else_block.clone()]
+                } else {
+                    vec![*cond.clone(), *block.clone()]
+                }
+            }
             _ => vec![],
         };
 
