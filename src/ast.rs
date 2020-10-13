@@ -193,6 +193,8 @@ impl<'a> AstConstructor<'a> {
                 | Token::LeftAngleBracketEqual
                 | Token::RightAngleBracket
                 | Token::RightAngleBracketEqual
+                | Token::EqualEqual
+                | Token::NotEqual
                 | Token::And
                 | Token::Or => self.read_binaryop(prev),
                 Token::End | Token::Comma | Token::RightParen | Token::Then => break,
@@ -227,11 +229,40 @@ impl<'a> AstConstructor<'a> {
             Token::LeftAngleBracketEqual,
             Token::RightAngleBracket,
             Token::RightAngleBracketEqual,
+            Token::EqualEqual,
+            Token::NotEqual,
             Token::And,
             Token::Or
         )?;
 
         match t {
+            Token::Plus => Ok(AstNode::Add(prev, Box::new(self.read_expression()?))),
+            Token::Minus => Ok(AstNode::Subtract(prev, Box::new(self.read_expression()?))),
+            Token::Asterisk => Ok(AstNode::Multiply(prev, Box::new(self.read_expression()?))),
+            Token::Slash => Ok(AstNode::Divide(prev, Box::new(self.read_expression()?))),
+            Token::Caret => Ok(AstNode::Exponentiate(
+                prev,
+                Box::new(self.read_expression()?),
+            )),
+            Token::Percent => Ok(AstNode::Modulo(prev, Box::new(self.read_expression()?))),
+            Token::DotDot => Ok(AstNode::Concat(prev, Box::new(self.read_expression()?))),
+            Token::LeftAngleBracket => {
+                Ok(AstNode::LessThan(prev, Box::new(self.read_expression()?)))
+            }
+            Token::LeftAngleBracketEqual => Ok(AstNode::LessThanOrEqual(
+                prev,
+                Box::new(self.read_expression()?),
+            )),
+            Token::RightAngleBracket => Ok(AstNode::GreaterThan(
+                prev,
+                Box::new(self.read_expression()?),
+            )),
+            Token::RightAngleBracketEqual => Ok(AstNode::GreaterThanOrEqual(
+                prev,
+                Box::new(self.read_expression()?),
+            )),
+            Token::EqualEqual => Ok(AstNode::Equal(prev, Box::new(self.read_expression()?))),
+            Token::NotEqual => Ok(AstNode::NotEqual(prev, Box::new(self.read_expression()?))),
             Token::And => Ok(AstNode::And(prev, Box::new(self.read_expression()?))),
             Token::Or => Ok(AstNode::Or(prev, Box::new(self.read_expression()?))),
             _ => unimplemented!(),
@@ -353,6 +384,45 @@ pub enum AstNode {
     Return(Box<AstNode>),
 
     /* left expr, right expr */
+    Add(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Subtract(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Multiply(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Divide(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Exponentiate(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Modulo(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Concat(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    LessThan(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    LessThanOrEqual(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    GreaterThan(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    GreaterThanOrEqual(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    Equal(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
+    NotEqual(Box<AstNode>, Box<AstNode>),
+
+    /* left expr, right expr */
     And(Box<AstNode>, Box<AstNode>),
 
     /* left expr, right expr */
@@ -405,6 +475,19 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Expression(_expr) => write!(f, "Expression"),
             AstNode::Return(_expr) => write!(f, "Return"),
             AstNode::If(_cond, _block, _else_block) => write!(f, "If"),
+            AstNode::Add(_left, _right) => write!(f, "Add"),
+            AstNode::Subtract(_left, _right) => write!(f, "Subtract"),
+            AstNode::Multiply(_left, _right) => write!(f, "Multiply"),
+            AstNode::Divide(_left, _right) => write!(f, "Divide"),
+            AstNode::Exponentiate(_left, _right) => write!(f, "Exponentiate"),
+            AstNode::Modulo(_left, _right) => write!(f, "Modulo"),
+            AstNode::Concat(_left, _right) => write!(f, "Concat"),
+            AstNode::LessThan(_left, _right) => write!(f, "LessThan"),
+            AstNode::LessThanOrEqual(_left, _right) => write!(f, "LessThanOrEqual"),
+            AstNode::GreaterThan(_left, _right) => write!(f, "GreaterThan"),
+            AstNode::GreaterThanOrEqual(_left, _right) => write!(f, "GreaterThanOrEqual"),
+            AstNode::Equal(_left, _right) => write!(f, "Equal"),
+            AstNode::NotEqual(_left, _right) => write!(f, "NotEqual"),
             AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Or(_left, _right) => write!(f, "Or"),
             AstNode::Str(s) => write!(f, "Str {}", s),
@@ -431,6 +514,19 @@ impl ptree::item::TreeItem for AstNode {
                     vec![*cond.clone(), *block.clone()]
                 }
             }
+            AstNode::Add(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Subtract(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Multiply(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Divide(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Exponentiate(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Modulo(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Concat(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::LessThan(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::LessThanOrEqual(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::GreaterThan(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::GreaterThanOrEqual(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Equal(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::NotEqual(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
             _ => vec![],
