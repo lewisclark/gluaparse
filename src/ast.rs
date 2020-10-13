@@ -96,16 +96,17 @@ impl<'a> AstConstructor<'a> {
 
     fn read_params(&mut self) -> Result<Vec<AstNode>, Error> {
         self.reader.expect(&Token::LeftParen)?;
-
-        let params = self.read_comma_delimited(&Token::RightParen)?;
-
+        let params = self.read_comma_delimited(|t| t == &Token::RightParen)?;
         self.reader.expect(&Token::RightParen)?;
 
         Ok(params)
     }
 
-    fn read_comma_delimited(&mut self, stop_on: &Token) -> Result<Vec<AstNode>, Error> {
-        let mut values = Vec::new();
+    fn read_comma_delimited<F>(&mut self, stopper: F) -> Result<Vec<AstNode>, Error>
+    where
+        F: Fn(&Token<'_>) -> bool,
+    {
+        let mut exprs = Vec::new();
 
         while let Some(t) = self.reader.peek(1) {
             match t {
@@ -114,16 +115,16 @@ impl<'a> AstConstructor<'a> {
                     continue;
                 }
                 t => {
-                    if t == stop_on {
+                    if stopper(t) {
                         break;
                     } else {
-                        values.push(self.read_expression()?);
+                        exprs.push(self.read_expression()?);
                     }
                 }
             };
         }
 
-        Ok(values)
+        Ok(exprs)
     }
 
     fn read_chunk(&mut self) -> Result<AstNode, Error> {
