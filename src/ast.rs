@@ -350,7 +350,16 @@ impl<'a> AstConstructor<'a> {
             Token::ElseIf
         )? {
             Token::End => Ok(AstNode::If(Box::new(expr), Box::new(block_true), None)),
-            Token::Else | Token::ElseIf => unimplemented!(),
+            Token::Else => {
+                let block_else = self.read_block(|t| t == &Token::End)?;
+
+                Ok(AstNode::If(
+                    Box::new(expr),
+                    Box::new(block_true),
+                    Some(Box::new(block_else)),
+                ))
+            }
+            Token::ElseIf => unimplemented!(),
             _ => panic!(),
         }
     }
