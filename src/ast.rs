@@ -233,6 +233,7 @@ impl<'a> AstConstructor<'a> {
 
         match t {
             Token::And => Ok(AstNode::And(prev, Box::new(self.read_expression()?))),
+            Token::Or => Ok(AstNode::Or(prev, Box::new(self.read_expression()?))),
             _ => unimplemented!(),
         }
     }
@@ -354,6 +355,9 @@ pub enum AstNode {
     /* left expr, right expr */
     And(Box<AstNode>, Box<AstNode>),
 
+    /* left expr, right expr */
+    Or(Box<AstNode>, Box<AstNode>),
+
     /* cond, block, else_block */
     If(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
 
@@ -402,6 +406,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Return(_expr) => write!(f, "Return"),
             AstNode::If(_cond, _block, _else_block) => write!(f, "If"),
             AstNode::And(_left, _right) => write!(f, "And"),
+            AstNode::Or(_left, _right) => write!(f, "Or"),
             AstNode::Str(s) => write!(f, "Str {}", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
@@ -427,6 +432,7 @@ impl ptree::item::TreeItem for AstNode {
                 }
             }
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
             _ => vec![],
         };
 
