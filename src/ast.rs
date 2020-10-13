@@ -109,19 +109,14 @@ impl<'a> AstConstructor<'a> {
         let mut exprs = Vec::new();
 
         while let Some(t) = self.reader.peek(0) {
-            match t {
-                Token::Comma => {
-                    self.reader.consume(1);
-                    continue;
-                }
-                t => {
-                    if stopper(t) {
-                        break;
-                    } else {
-                        exprs.push(self.read_expression()?);
-                    }
-                }
-            };
+            if stopper(t) {
+                break;
+            } else {
+                match t {
+                    Token::Comma => self.reader.consume(1),
+                    _ => exprs.push(self.read_expression()?),
+                };
+            }
         }
 
         Ok(exprs)
@@ -179,21 +174,47 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_expression(&mut self) -> Result<AstNode, Error> {
-        let val = match self.reader.peek(0) {
-            Some(t) => match t {
+        let mut prev: Option<AstNode> = None;
+
+        while let Some(t) = self.reader.peek(0) {
+            let expr = match t {
                 Token::Function => self.read_func(),
                 Token::Ident(_) => self.read_ident(),
                 Token::Str(_) => self.read_str(),
                 Token::Int(_) => self.read_int(),
                 Token::Float(_) => self.read_float(),
-                Token::True => self.read_bool(),
-                Token::False => self.read_bool(),
-                t => Err(Error::new(format!("Expected value, found {:?}", t))),
-            },
-            None => Err(Error::new("Expected value, found eof".to_string())),
-        };
+                Token::True | Token::False => self.read_bool(),
+                Token::Plus
+                | Token::Minus
+                | Token::Asterisk
+                | Token::Slash
+                | Token::Caret
+                | Token::Percent
+                | Token::DotDot
+                | Token::LeftAngleBracket
+                | Token::LeftAngleBracketEqual
+                | Token::RightAngleBracket
+                | Token::RightAngleBracketEqual
+                | Token::And
+                | Token::Or //=> self.read_binaryop(),
+                | Token::And => match prev { // Move this into read_binaryop
+                    Some(prev) => {
+                        self.reader.consume(1);
+                        Ok(AstNode::And(
+                            Box::new(AstNode::Expression(Box::new(prev))),
+                            Box::new(self.read_expression()?),
+                        ))
+                    }
+                    None => Err(Error::new("Expected expression before And".to_string())),
+                },
+                Token::End | Token::Comma | Token::RightParen | Token::Then => break,
+                _ => unimplemented!(),
+            }?;
 
-        Ok(AstNode::Expression(Box::new(val?)))
+            prev = Some(expr);
+        }
+
+        Ok(AstNode::Expression(Box::new(prev.unwrap())))
     }
 
     fn read_bool(&mut self) -> Result<AstNode, Error> {
@@ -325,6 +346,9 @@ pub enum AstNode {
     /* expr */
     Return(Box<AstNode>),
 
+    /* left expr, right expr */
+    And(Box<AstNode>, Box<AstNode>),
+
     /* cond, block, else_block */
     If(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
 
@@ -372,6 +396,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Expression(_expr) => write!(f, "Expression"),
             AstNode::Return(_expr) => write!(f, "Return"),
             AstNode::If(_cond, _block, _else_block) => write!(f, "If"),
+            AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Str(s) => write!(f, "Str {}", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
@@ -396,6 +421,7 @@ impl ptree::item::TreeItem for AstNode {
                     vec![*cond.clone(), *block.clone()]
                 }
             }
+            AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             _ => vec![],
         };
 

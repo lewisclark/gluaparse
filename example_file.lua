@@ -1,6 +1,6 @@
 local function foo(bob, jimmy)
-	if true then
-		print(bob, jimmy)
+	if true and false then
+		print(bob, fred)
 	end
 
 	return bob
