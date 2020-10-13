@@ -385,7 +385,7 @@ impl ptree::item::TreeItem for AstNode {
         _style: &ptree::style::Style,
     ) -> std::io::Result<()> {
         match self {
-            AstNode::Block(_) => write!(f, "{}", "Block"),
+            AstNode::Block(_) => write!(f, "Block"),
             AstNode::Function(params, _body) => write!(f, "Function {:?}", params),
             AstNode::Call(_variable, _params) => write!(f, "Call"),
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
@@ -406,7 +406,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
-            _ => write!(f, "{}", "<unknown>"),
+            _ => write!(f, "Unknown"),
         }
     }
 
