@@ -3,7 +3,7 @@ local function foo(bob, jimmy)
 		print(bob, fred)
 	end
 
-	return bob
+	return bob and jill
 end
 
 foo("hello", 0.39)

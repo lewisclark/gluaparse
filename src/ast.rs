@@ -194,17 +194,7 @@ impl<'a> AstConstructor<'a> {
                 | Token::RightAngleBracket
                 | Token::RightAngleBracketEqual
                 | Token::And
-                | Token::Or //=> self.read_binaryop(),
-                | Token::And => match prev { // Move this into read_binaryop
-                    Some(prev) => {
-                        self.reader.consume(1);
-                        Ok(AstNode::And(
-                            Box::new(AstNode::Expression(Box::new(prev))),
-                            Box::new(self.read_expression()?),
-                        ))
-                    }
-                    None => Err(Error::new("Expected expression before And".to_string())),
-                },
+                | Token::Or => self.read_binaryop(prev),
                 Token::End | Token::Comma | Token::RightParen | Token::Then => break,
                 _ => unimplemented!(),
             }?;
@@ -213,6 +203,38 @@ impl<'a> AstConstructor<'a> {
         }
 
         Ok(AstNode::Expression(Box::new(prev.unwrap())))
+    }
+
+    fn read_binaryop(&mut self, prev: Option<AstNode>) -> Result<AstNode, Error> {
+        let prev = match prev {
+            Some(t) => Ok(Box::new(AstNode::Expression(Box::new(t)))),
+            None => Err(Error::new(
+                "Expected value before binary operator".to_string(),
+            )),
+        }?;
+
+        let t = expect!(
+            self.reader.next(),
+            "Binary Operator",
+            Token::Plus,
+            Token::Minus,
+            Token::Asterisk,
+            Token::Slash,
+            Token::Caret,
+            Token::Percent,
+            Token::DotDot,
+            Token::LeftAngleBracket,
+            Token::LeftAngleBracketEqual,
+            Token::RightAngleBracket,
+            Token::RightAngleBracketEqual,
+            Token::And,
+            Token::Or
+        )?;
+
+        match t {
+            Token::And => Ok(AstNode::And(prev, Box::new(self.read_expression()?))),
+            _ => unimplemented!(),
+        }
     }
 
     fn read_bool(&mut self) -> Result<AstNode, Error> {
