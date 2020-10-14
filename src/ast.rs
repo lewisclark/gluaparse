@@ -171,17 +171,35 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Call(Box::new(variable), params))
     }
 
+    fn read_value(&mut self) -> Result<AstNode, Error> {
+        let t = expect!(
+            self.reader.peek(0),
+            "Value",
+            Token::Function,
+            Token::Ident(_),
+            Token::Str(_),
+            Token::Int(_),
+            Token::Float(_),
+            Token::True,
+            Token::False
+        )?;
+
+        match t {
+            Token::Function => self.read_func(),
+            Token::Ident(_) => self.read_ident(),
+            Token::Str(_) => self.read_str(),
+            Token::Int(_) => self.read_int(),
+            Token::Float(_) => self.read_float(),
+            Token::True | Token::False => self.read_bool(),
+            _ => panic!(),
+        }
+    }
+
     fn read_expression(&mut self) -> Result<AstNode, Error> {
         let mut prev: Option<AstNode> = None;
 
         while let Some(t) = self.reader.peek(0) {
             let expr = match t {
-                Token::Function => self.read_func(),
-                Token::Ident(_) => self.read_ident(),
-                Token::Str(_) => self.read_str(),
-                Token::Int(_) => self.read_int(),
-                Token::Float(_) => self.read_float(),
-                Token::True | Token::False => self.read_bool(),
                 Token::Plus
                 | Token::Minus
                 | Token::Asterisk
@@ -198,7 +216,7 @@ impl<'a> AstConstructor<'a> {
                 | Token::And
                 | Token::Or => self.read_binaryop(prev),
                 Token::End | Token::Comma | Token::RightParen | Token::Then => break,
-                t => unimplemented!("{:?}", t),
+                _ => self.read_value(),
             }?;
 
             prev = Some(expr);

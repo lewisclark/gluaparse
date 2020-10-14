@@ -17,3 +17,4 @@ do
 end
 
 foo = true
+foo = false
