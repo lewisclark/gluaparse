@@ -94,26 +94,20 @@ impl<'a> AstConstructor<'a> {
 
     fn read_params(&mut self) -> Result<Vec<AstNode>, Error> {
         expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
-        let params = self.read_comma_delimited(|t| t == &Token::RightParen)?;
+        let params = self.read_comma_delimited()?;
         expect!(self.reader.next(), "RightParen", Token::RightParen)?;
 
         Ok(params)
     }
 
-    fn read_comma_delimited<F>(&mut self, stopper: F) -> Result<Vec<AstNode>, Error>
-    where
-        F: Fn(&Token<'_>) -> bool,
-    {
+    fn read_comma_delimited(&mut self) -> Result<Vec<AstNode>, Error> {
         let mut exprs = Vec::new();
 
         while let Some(t) = self.reader.peek(0) {
-            if stopper(t) {
-                break;
-            } else {
-                match t {
-                    Token::Comma => self.reader.consume(1),
-                    _ => exprs.push(self.read_expression()?),
-                };
+            match t {
+                Token::Comma => self.reader.consume(1),
+                Token::RightParen | Token::RightSquareBracket | Token::RightCurlyBracket => break,
+                _ => exprs.push(self.read_expression()?),
             }
         }
 
