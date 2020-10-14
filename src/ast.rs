@@ -78,13 +78,13 @@ impl<'a> AstConstructor<'a> {
 
         if is_anonymous {
             let params = self.read_params()?;
-            let body = Box::new(self.read_block(|t| t == &Token::End)?);
+            let body = Box::new(self.read_block()?);
 
             Ok(AstNode::Function(params, body))
         } else {
             let ident = self.read_variable(Some(is_local))?;
             let params = self.read_params()?;
-            let body = Box::new(self.read_block(|t| t == &Token::End)?);
+            let body = Box::new(self.read_block()?);
 
             let func = AstNode::Function(params, body);
 
@@ -121,18 +121,18 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_chunk(&mut self) -> Result<AstNode, Error> {
-        self.read_block(|_| false)
+        self.read_block()
     }
 
-    fn read_block<F>(&mut self, breaker: F) -> Result<AstNode, Error>
-    where
-        F: Fn(&Token<'_>) -> bool,
-    {
+    fn read_block(&mut self) -> Result<AstNode, Error> {
         let mut block = Vec::new();
 
         while let Some(token) = self.reader.peek(0) {
             match token {
-                Token::Do => unimplemented!(),
+                Token::Do => {
+                    self.reader.consume(1);
+                    block.push(self.read_block()?)
+                }
                 Token::Local => self.reader.consume(1),
                 Token::Function => block.push(self.read_func()?),
                 Token::Ident(_) => match self.reader.peek(1) {
@@ -144,14 +144,11 @@ impl<'a> AstConstructor<'a> {
                 },
                 Token::Return => block.push(self.read_return()?),
                 Token::If => block.push(self.read_if()?),
-                t => {
-                    if breaker(t) {
-                        self.reader.consume(1);
-                        break;
-                    } else {
-                        unimplemented!("{:?}", t);
-                    }
+                Token::End | Token::Else | Token::ElseIf => {
+                    self.reader.consume(1);
+                    break;
                 }
+                t => unimplemented!("{:?}", t),
             };
         }
 
@@ -336,11 +333,7 @@ impl<'a> AstConstructor<'a> {
         expect!(self.reader.next(), "If", Token::If)?;
         let expr = self.read_expression()?;
         expect!(self.reader.next(), "Then", Token::Then)?;
-
-        let block_true = self.read_block(|t| match t {
-            Token::End | Token::Else | Token::ElseIf => true,
-            _ => false,
-        })?;
+        let block_true = self.read_block()?;
 
         match expect!(
             self.reader.peek(-1),
@@ -355,7 +348,7 @@ impl<'a> AstConstructor<'a> {
                 Ok(AstNode::If(vec![stub]))
             }
             Token::Else => {
-                let block_else = self.read_block(|t| t == &Token::End)?;
+                let block_else = self.read_block()?;
                 let stub = AstNode::IfStub(None, Box::new(block_else));
 
                 Ok(AstNode::If(vec![stub]))
@@ -369,15 +362,12 @@ impl<'a> AstConstructor<'a> {
                         Token::ElseIf => {
                             let expr = self.read_expression()?;
                             expect!(self.reader.next(), "Then", Token::Then)?;
-                            let block = self.read_block(|t| match t {
-                                Token::ElseIf | Token::Else | Token::End => true,
-                                _ => false,
-                            })?;
+                            let block = self.read_block()?;
 
                             stubs.push(AstNode::IfStub(Some(Box::new(expr)), Box::new(block)));
                         }
                         Token::Else => {
-                            let block = self.read_block(|t| t == &Token::End)?;
+                            let block = self.read_block()?;
 
                             stubs.push(AstNode::IfStub(None, Box::new(block)));
                         }

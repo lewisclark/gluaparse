@@ -10,4 +10,6 @@ local function foo(bob, jimmy)
 	return  1 == 2
 end
 
-foo("hello", 0.39)
+do
+	foo("hello", 0.39)
+end
