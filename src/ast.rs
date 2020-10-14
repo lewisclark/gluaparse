@@ -56,8 +56,8 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    pub fn create(mut self) -> Result<Option<AstNode>, Error> {
-        Ok(Some(self.read_chunk()?))
+    pub fn create(mut self) -> Result<AstNode, Error> {
+        self.read_chunk()
     }
 
     fn read_func(&mut self) -> Result<AstNode, Error> {

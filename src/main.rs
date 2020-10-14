@@ -25,5 +25,5 @@ fn main() {
         .expect("Failed to read file contents");
 
     let ast = gluaparse::parse(&contents).expect("Failed to parse Lua");
-    println!("AST:\n{}", ast);
+    println!("{}", ast);
 }

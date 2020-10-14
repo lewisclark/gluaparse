@@ -10,9 +10,5 @@ pub fn parse(code: &str) -> Result<AstNode, Error> {
     let lexer = Lexer::from_source(code).lex()?;
     let tokens = lexer.tokens();
 
-    println!("tokens: {:?}", tokens);
-
-    let ast = AstConstructor::new(tokens).create()?;
-
-    Ok(ast.unwrap())
+    AstConstructor::new(tokens).create()
 }
