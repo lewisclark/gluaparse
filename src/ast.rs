@@ -322,9 +322,10 @@ impl<'a> AstConstructor<'a> {
 
     fn read_if(&mut self) -> Result<AstNode, Error> {
         expect!(self.reader.next(), "If", Token::If)?;
-        let expr = self.read_expression()?;
+        let if_expr = self.read_expression()?;
         expect!(self.reader.next(), "Then", Token::Then)?;
-        let block_true = self.read_block()?;
+        let if_block = self.read_block()?;
+        let if_stub = AstNode::IfStub(Some(Box::new(if_expr)), Box::new(if_block));
 
         match expect!(
             self.reader.peek(-1),
@@ -333,20 +334,15 @@ impl<'a> AstConstructor<'a> {
             Token::Else,
             Token::ElseIf
         )? {
-            Token::End => {
-                let stub = AstNode::IfStub(Some(Box::new(expr)), Box::new(block_true));
-
-                Ok(AstNode::If(vec![stub]))
-            }
+            Token::End => Ok(AstNode::If(vec![if_stub])),
             Token::Else => {
-                let block_else = self.read_block()?;
-                let stub = AstNode::IfStub(None, Box::new(block_else));
+                let else_block = self.read_block()?;
+                let else_stub = AstNode::IfStub(None, Box::new(else_block));
 
-                Ok(AstNode::If(vec![stub]))
+                Ok(AstNode::If(vec![if_stub, else_stub]))
             }
             Token::ElseIf => {
-                let first_stub = AstNode::IfStub(Some(Box::new(expr)), Box::new(block_true));
-                let mut stubs = vec![first_stub];
+                let mut stubs = vec![if_stub];
 
                 loop {
                     match self.reader.peek(-1).unwrap() {
