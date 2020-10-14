@@ -7,9 +7,13 @@ local function foo(bob, jimmy)
 		yeet(bob, fred)
 	end
 
-	return  1 == 2
+	return 0 - 10 + 2
 end
 
 do
-	foo("hello", 0.39)
+	do foo("hello", 0.39) end
+
+	do end
 end
+
+foo = true

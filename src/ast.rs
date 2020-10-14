@@ -132,9 +132,10 @@ impl<'a> AstConstructor<'a> {
                 Token::Ident(_) => match self.reader.peek(1) {
                     Some(t) => match t {
                         Token::LeftParen => block.push(self.read_call()?),
-                        _ => unimplemented!(),
+                        Token::Equal => block.push(self.read_assignment()?),
+                        t => unimplemented!("{:?}", t),
                     },
-                    None => unimplemented!(),
+                    None => panic!(),
                 },
                 Token::Return => block.push(self.read_return()?),
                 Token::If => block.push(self.read_if()?),
@@ -147,6 +148,14 @@ impl<'a> AstConstructor<'a> {
         }
 
         Ok(AstNode::Block(block))
+    }
+
+    fn read_assignment(&mut self) -> Result<AstNode, Error> {
+        let ident = self.read_ident()?;
+        expect!(self.reader.next(), "Equal", Token::Equal)?;
+        let expr = self.read_expression()?;
+
+        Ok(AstNode::Assignment(Box::new(ident), Box::new(expr)))
     }
 
     fn read_return(&mut self) -> Result<AstNode, Error> {
@@ -189,7 +198,7 @@ impl<'a> AstConstructor<'a> {
                 | Token::And
                 | Token::Or => self.read_binaryop(prev),
                 Token::End | Token::Comma | Token::RightParen | Token::Then => break,
-                _ => unimplemented!(),
+                t => unimplemented!("{:?}", t),
             }?;
 
             prev = Some(expr);
@@ -256,7 +265,7 @@ impl<'a> AstConstructor<'a> {
             Token::NotEqual => Ok(AstNode::NotEqual(prev, Box::new(self.read_expression()?))),
             Token::And => Ok(AstNode::And(prev, Box::new(self.read_expression()?))),
             Token::Or => Ok(AstNode::Or(prev, Box::new(self.read_expression()?))),
-            _ => unimplemented!(),
+            t => unimplemented!("{:?}", t),
         }
     }
 
