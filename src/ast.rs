@@ -285,10 +285,7 @@ impl<'a> AstConstructor<'a> {
         let is_local = match is_local {
             Some(b) => b,
             None => match self.reader.peek(-3) {
-                Some(t) => match t {
-                    Token::Local => true,
-                    _ => false,
-                },
+                Some(t) => matches!(t, Token::Local),
                 None => false,
             },
         };
