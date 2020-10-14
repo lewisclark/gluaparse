@@ -149,7 +149,7 @@ impl<'a> AstConstructor<'a> {
                         self.reader.consume(1);
                         break;
                     } else {
-                        unimplemented!();
+                        unimplemented!("{:?}", t);
                     }
                 }
             };
@@ -349,17 +349,43 @@ impl<'a> AstConstructor<'a> {
             Token::Else,
             Token::ElseIf
         )? {
-            Token::End => Ok(AstNode::If(Box::new(expr), Box::new(block_true), None)),
+            Token::End => {
+                let stub = AstNode::IfStub(Some(Box::new(expr)), Box::new(block_true));
+
+                Ok(AstNode::If(vec![stub]))
+            }
             Token::Else => {
                 let block_else = self.read_block(|t| t == &Token::End)?;
+                let stub = AstNode::IfStub(None, Box::new(block_else));
 
-                Ok(AstNode::If(
-                    Box::new(expr),
-                    Box::new(block_true),
-                    Some(Box::new(block_else)),
-                ))
+                Ok(AstNode::If(vec![stub]))
             }
-            Token::ElseIf => unimplemented!(),
+            Token::ElseIf => {
+                let first_stub = AstNode::IfStub(Some(Box::new(expr)), Box::new(block_true));
+                let mut stubs = vec![first_stub];
+
+                loop {
+                    match self.reader.peek(-1).unwrap() {
+                        Token::ElseIf => {
+                            let expr = self.read_expression()?;
+                            expect!(self.reader.next(), "Then", Token::Then)?;
+                            let block = self.read_block(|t| match t {
+                                Token::ElseIf | Token::Else | Token::End => true,
+                                _ => false,
+                            })?;
+
+                            stubs.push(AstNode::IfStub(Some(Box::new(expr)), Box::new(block)));
+                        }
+                        Token::Else => {
+                            let block = self.read_block(|t| t == &Token::End)?;
+
+                            stubs.push(AstNode::IfStub(None, Box::new(block)));
+                        }
+                        Token::End => break Ok(AstNode::If(stubs)),
+                        _ => panic!(),
+                    }
+                }
+            }
             _ => panic!(),
         }
     }
@@ -437,11 +463,14 @@ pub enum AstNode {
     /* left expr, right expr */
     Or(Box<AstNode>, Box<AstNode>),
 
-    /* cond, block, else_block */
-    If(Box<AstNode>, Box<AstNode>, Option<Box<AstNode>>),
+    /* cond, block - if cond is None then it is an else */
+    IfStub(Option<Box<AstNode>>, Box<AstNode>),
 
-    /* vec_if_stmts, else_block */
-    IfElseIf(Vec<AstNode>, Option<Box<AstNode>>),
+    /* vec of if statements
+     * a single item represents an `if ... then ... end`
+     * two items may represent an if + elseif or an if + else for example,
+     * based on the Option in IfStub */
+    If(Vec<AstNode>),
 
     Str(String),
     Int(isize),
@@ -483,7 +512,8 @@ impl ptree::item::TreeItem for AstNode {
             ),
             AstNode::Expression(_expr) => write!(f, "Expression"),
             AstNode::Return(_expr) => write!(f, "Return"),
-            AstNode::If(_cond, _block, _else_block) => write!(f, "If"),
+            AstNode::If(_stubs) => write!(f, "If"),
+            AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
             AstNode::Add(_left, _right) => write!(f, "Add"),
             AstNode::Subtract(_left, _right) => write!(f, "Subtract"),
             AstNode::Multiply(_left, _right) => write!(f, "Multiply"),
@@ -516,11 +546,12 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Variable(name, _is_local) => vec![*name.clone()],
             AstNode::Expression(expr) => vec![*expr.clone()],
             AstNode::Return(expr) => vec![*expr.clone()],
-            AstNode::If(cond, block, else_block) => {
-                if let Some(else_block) = else_block {
-                    vec![*cond.clone(), *block.clone(), *else_block.clone()]
+            AstNode::If(stubs) => stubs.to_vec(),
+            AstNode::IfStub(cond, body) => {
+                if let Some(cond) = cond {
+                    vec![*cond.clone(), *body.clone()]
                 } else {
-                    vec![*cond.clone(), *block.clone()]
+                    vec![*body.clone()]
                 }
             }
             AstNode::Add(left, right) => vec![*left.clone(), *right.clone()],

@@ -1,6 +1,8 @@
 local function foo(bob, jimmy)
 	if true then
 		print(bob, fred)
+	elseif false then
+		cow(bob, fred)
 	else
 		yeet(bob, fred)
 	end
