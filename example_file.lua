@@ -18,3 +18,5 @@ end
 
 foo = true
 foo = false
+foo = true and false
+foo = true and false or true

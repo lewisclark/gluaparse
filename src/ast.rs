@@ -196,10 +196,10 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_expression(&mut self) -> Result<AstNode, Error> {
-        let mut prev: Option<AstNode> = None;
+        let left = self.read_value()?;
 
-        while let Some(t) = self.reader.peek(0) {
-            let expr = match t {
+        match self.reader.peek(0) {
+            Some(t) => match t {
                 Token::Plus
                 | Token::Minus
                 | Token::Asterisk
@@ -214,25 +214,14 @@ impl<'a> AstConstructor<'a> {
                 | Token::EqualEqual
                 | Token::NotEqual
                 | Token::And
-                | Token::Or => self.read_binaryop(prev),
-                Token::End | Token::Comma | Token::RightParen | Token::Then => break,
-                _ => self.read_value(),
-            }?;
-
-            prev = Some(expr);
+                | Token::Or => Ok(AstNode::Expression(Box::new(self.read_binaryop(left)?))),
+                _ => Ok(AstNode::Expression(Box::new(left))),
+            },
+            None => Ok(AstNode::Expression(Box::new(left))),
         }
-
-        Ok(AstNode::Expression(Box::new(prev.unwrap())))
     }
 
-    fn read_binaryop(&mut self, prev: Option<AstNode>) -> Result<AstNode, Error> {
-        let prev = match prev {
-            Some(t) => Ok(Box::new(AstNode::Expression(Box::new(t)))),
-            None => Err(Error::new(
-                "Expected value before binary operator".to_string(),
-            )),
-        }?;
-
+    fn read_binaryop(&mut self, left: AstNode) -> Result<AstNode, Error> {
         let t = expect!(
             self.reader.next(),
             "Binary Operator",
@@ -253,37 +242,39 @@ impl<'a> AstConstructor<'a> {
             Token::Or
         )?;
 
+        let left = Box::new(left);
+
         match t {
-            Token::Plus => Ok(AstNode::Add(prev, Box::new(self.read_expression()?))),
-            Token::Minus => Ok(AstNode::Subtract(prev, Box::new(self.read_expression()?))),
-            Token::Asterisk => Ok(AstNode::Multiply(prev, Box::new(self.read_expression()?))),
-            Token::Slash => Ok(AstNode::Divide(prev, Box::new(self.read_expression()?))),
+            Token::Plus => Ok(AstNode::Add(left, Box::new(self.read_expression()?))),
+            Token::Minus => Ok(AstNode::Subtract(left, Box::new(self.read_expression()?))),
+            Token::Asterisk => Ok(AstNode::Multiply(left, Box::new(self.read_expression()?))),
+            Token::Slash => Ok(AstNode::Divide(left, Box::new(self.read_expression()?))),
             Token::Caret => Ok(AstNode::Exponentiate(
-                prev,
+                left,
                 Box::new(self.read_expression()?),
             )),
-            Token::Percent => Ok(AstNode::Modulo(prev, Box::new(self.read_expression()?))),
-            Token::DotDot => Ok(AstNode::Concat(prev, Box::new(self.read_expression()?))),
+            Token::Percent => Ok(AstNode::Modulo(left, Box::new(self.read_expression()?))),
+            Token::DotDot => Ok(AstNode::Concat(left, Box::new(self.read_expression()?))),
             Token::LeftAngleBracket => {
-                Ok(AstNode::LessThan(prev, Box::new(self.read_expression()?)))
+                Ok(AstNode::LessThan(left, Box::new(self.read_expression()?)))
             }
             Token::LeftAngleBracketEqual => Ok(AstNode::LessThanOrEqual(
-                prev,
+                left,
                 Box::new(self.read_expression()?),
             )),
             Token::RightAngleBracket => Ok(AstNode::GreaterThan(
-                prev,
+                left,
                 Box::new(self.read_expression()?),
             )),
             Token::RightAngleBracketEqual => Ok(AstNode::GreaterThanOrEqual(
-                prev,
+                left,
                 Box::new(self.read_expression()?),
             )),
-            Token::EqualEqual => Ok(AstNode::Equal(prev, Box::new(self.read_expression()?))),
-            Token::NotEqual => Ok(AstNode::NotEqual(prev, Box::new(self.read_expression()?))),
-            Token::And => Ok(AstNode::And(prev, Box::new(self.read_expression()?))),
-            Token::Or => Ok(AstNode::Or(prev, Box::new(self.read_expression()?))),
-            t => unimplemented!("{:?}", t),
+            Token::EqualEqual => Ok(AstNode::Equal(left, Box::new(self.read_expression()?))),
+            Token::NotEqual => Ok(AstNode::NotEqual(left, Box::new(self.read_expression()?))),
+            Token::And => Ok(AstNode::And(left, Box::new(self.read_expression()?))),
+            Token::Or => Ok(AstNode::Or(left, Box::new(self.read_expression()?))),
+            _ => panic!(),
         }
     }
 
