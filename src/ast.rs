@@ -181,7 +181,8 @@ impl<'a> AstConstructor<'a> {
             Token::Int(_),
             Token::Float(_),
             Token::True,
-            Token::False
+            Token::False,
+            Token::LeftCurlyBracket
         )?;
 
         match t {
@@ -191,8 +192,38 @@ impl<'a> AstConstructor<'a> {
             Token::Int(_) => self.read_int(),
             Token::Float(_) => self.read_float(),
             Token::True | Token::False => self.read_bool(),
+            Token::LeftCurlyBracket => self.read_table(),
             _ => panic!(),
         }
+    }
+
+    fn read_table(&mut self) -> Result<AstNode, Error> {
+        expect!(
+            self.reader.next(),
+            "LeftCurlyBracket",
+            Token::LeftCurlyBracket
+        )?;
+        expect!(
+            self.reader.next(),
+            "RightCurlyBracket",
+            Token::RightCurlyBracket
+        )?;
+
+        let mut kv = Vec::new();
+        kv.push(AstNode::KeyValue(
+            Box::new(AstNode::Int(1)),
+            Box::new(AstNode::Str(String::from("test"))),
+        ));
+        kv.push(AstNode::KeyValue(
+            Box::new(AstNode::Int(2)),
+            Box::new(AstNode::Str(String::from("woof"))),
+        ));
+        kv.push(AstNode::KeyValue(
+            Box::new(AstNode::Int(3)),
+            Box::new(AstNode::Str(String::from("meow"))),
+        ));
+
+        Ok(AstNode::Table(kv))
     }
 
     fn read_expression(&mut self) -> Result<AstNode, Error> {
@@ -467,6 +498,12 @@ pub enum AstNode {
      * based on the Option in IfStub */
     If(Vec<AstNode>),
 
+    /* key, val */
+    KeyValue(Box<AstNode>, Box<AstNode>),
+
+    /* key values */
+    Table(Vec<AstNode>),
+
     Str(String),
     Int(isize),
     Float(f64),
@@ -524,10 +561,12 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(_left, _right) => write!(f, "NotEqual"),
             AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Or(_left, _right) => write!(f, "Or"),
-            AstNode::Str(s) => write!(f, "Str {}", s),
+            AstNode::Str(s) => write!(f, "Str \"{}\"", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
+            AstNode::KeyValue(_key, _value) => write!(f, "Key Value"),
+            AstNode::Table(_kv) => write!(f, "Table"),
             _ => write!(f, "Unknown"),
         }
     }
@@ -564,6 +603,8 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::KeyValue(key, value) => vec![*key.clone(), *value.clone()],
+            AstNode::Table(kv) => kv.clone(),
             _ => vec![],
         };
 
