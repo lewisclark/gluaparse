@@ -203,27 +203,59 @@ impl<'a> AstConstructor<'a> {
             "LeftCurlyBracket",
             Token::LeftCurlyBracket
         )?;
+
+        let mut kv = Vec::new();
+
+        while let Some(t) = self.reader.peek(0) {
+            if matches!(t, Token::RightCurlyBracket) {
+                break;
+            } else {
+                let key = self.read_table_key()?;
+                expect!(self.reader.next(), "Equal", Token::Equal)?;
+                let val = self.read_value()?;
+
+                if self.reader.peek(0) == Some(&Token::Comma) {
+                    self.reader.consume(1);
+                }
+
+                kv.push(AstNode::KeyValue(Box::new(key), Box::new(val)));
+            }
+        }
+
         expect!(
             self.reader.next(),
             "RightCurlyBracket",
             Token::RightCurlyBracket
         )?;
 
-        let mut kv = Vec::new();
-        kv.push(AstNode::KeyValue(
-            Box::new(AstNode::Int(1)),
-            Box::new(AstNode::Str(String::from("test"))),
-        ));
-        kv.push(AstNode::KeyValue(
-            Box::new(AstNode::Int(2)),
-            Box::new(AstNode::Str(String::from("woof"))),
-        ));
-        kv.push(AstNode::KeyValue(
-            Box::new(AstNode::Int(3)),
-            Box::new(AstNode::Str(String::from("meow"))),
-        ));
-
         Ok(AstNode::Table(kv))
+    }
+
+    fn read_table_key(&mut self) -> Result<AstNode, Error> {
+        match expect!(
+            self.reader.peek(0),
+            "Table key",
+            Token::LeftSquareBracket,
+            Token::Ident(_)
+        )? {
+            Token::LeftSquareBracket => {
+                expect!(
+                    self.reader.next(),
+                    "LeftSquareBracket",
+                    Token::LeftSquareBracket
+                )?;
+                let k = self.read_value();
+                expect!(
+                    self.reader.next(),
+                    "RightSquareBracket",
+                    Token::RightSquareBracket
+                )?;
+
+                k
+            }
+            Token::Ident(_) => self.read_ident(),
+            _ => panic!(),
+        }
     }
 
     fn read_expression(&mut self) -> Result<AstNode, Error> {

@@ -20,4 +20,9 @@ foo = true
 foo = false
 foo = true and false
 foo = true and false or true
-local dog = {}
+local dog = {
+	abc = true,
+	[1] = true,
+	[function() end] = true,
+	["true"] = true,
+}
