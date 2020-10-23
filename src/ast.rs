@@ -133,6 +133,17 @@ impl<'a> AstConstructor<'a> {
                     Some(t) => match t {
                         Token::LeftParen => block.push(self.read_call()?),
                         Token::Equal => block.push(self.read_assignment()?),
+                        Token::Dot => {
+                            let mut i = 0;
+                            while let Some(t) = self.reader.peek(i) {
+                                match t { // FIXME: This duplicates the above code
+                                    Token::Ident(_) | Token::Dot => i += 1,
+                                    Token::LeftParen => block.push(self.read_call()?),
+                                    Token::Equal => block.push(self.read_assignment()?),
+                                    _ => unimplemented!("{:?}", t),
+                                }
+                            }
+                        }
                         t => unimplemented!("{:?}", t),
                     },
                     None => panic!(),
@@ -352,12 +363,43 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_ident(&mut self) -> Result<AstNode, Error> {
-        let ident = match expect!(self.reader.next(), "Ident", Token::Ident(_))? {
-            Token::Ident(s) => s,
-            _ => panic!(),
-        };
+        let mut ident = None;
+        let mut dot_present = false;
 
-        Ok(AstNode::Ident(ident.to_string()))
+        loop {
+            let t = expect!(
+                self.reader.peek(0),
+                "Ident or Dot",
+                Token::Ident(_),
+                Token::Dot
+            );
+
+            match t {
+                Ok(t) => match t {
+                    Token::Ident(s) => {
+                        let s = s.to_string();
+
+                        self.reader.consume(1);
+
+                        if dot_present {
+                            dot_present = false;
+
+                            ident = Some(AstNode::Index(
+                                Box::new(ident.unwrap()),
+                                Box::new(AstNode::Ident(s)),
+                            ));
+                        } else {
+                            ident = Some(AstNode::Ident(s));
+                        }
+                    }
+                    Token::Dot => { self.reader.consume(1); dot_present = true; },
+                    _ => panic!(),
+                },
+                Err(_) => break,
+            }
+        }
+
+        Ok(ident.unwrap())
     }
 
     fn read_variable(&mut self, is_local: Option<bool>) -> Result<AstNode, Error> {
@@ -521,6 +563,9 @@ pub enum AstNode {
     /* left expr, right expr */
     Or(Box<AstNode>, Box<AstNode>),
 
+    /* table, key */
+    Index(Box<AstNode>, Box<AstNode>),
+
     /* cond, block - if cond is None then it is an else */
     IfStub(Option<Box<AstNode>>, Box<AstNode>),
 
@@ -593,6 +638,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(_left, _right) => write!(f, "NotEqual"),
             AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Or(_left, _right) => write!(f, "Or"),
+            AstNode::Index(_t, _k) => write!(f, "Index"),
             AstNode::Str(s) => write!(f, "Str \"{}\"", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
@@ -635,6 +681,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Index(t, k) => vec![*t.clone(), *k.clone()],
             AstNode::KeyValue(key, value) => vec![*key.clone(), *value.clone()],
             AstNode::Table(kv) => kv.clone(),
             _ => vec![],

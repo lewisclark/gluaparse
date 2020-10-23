@@ -26,3 +26,7 @@ local dog = {
 	[function() end] = true,
 	["true"] = true,
 }
+
+dog.woof = "yep"
+dog.meow = {}
+dog.meow.aa = false
