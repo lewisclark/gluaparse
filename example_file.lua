@@ -30,3 +30,6 @@ local dog = {
 dog.woof = "yep"
 dog.meow = {}
 dog.meow.aa = false
+
+dog.meow[yeet] = "ok"
+dog.meow[69] = "ok"

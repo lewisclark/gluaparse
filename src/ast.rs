@@ -120,34 +120,27 @@ impl<'a> AstConstructor<'a> {
 
     fn read_block(&mut self) -> Result<AstNode, Error> {
         let mut block = Vec::new();
+        let mut prev = None;
 
         while let Some(token) = self.reader.peek(0) {
             match token {
                 Token::Do => {
                     self.reader.consume(1);
-                    block.push(self.read_block()?)
+                    block.push(self.read_block()?);
                 }
                 Token::Local => self.reader.consume(1),
                 Token::Function => block.push(self.read_func()?),
-                Token::Ident(_) => match self.reader.peek(1) {
-                    Some(t) => match t {
-                        Token::LeftParen => block.push(self.read_call()?),
-                        Token::Equal => block.push(self.read_assignment()?),
-                        Token::Dot => {
-                            let mut i = 0;
-                            while let Some(t) = self.reader.peek(i) {
-                                match t { // FIXME: This duplicates the above code
-                                    Token::Ident(_) | Token::Dot => i += 1,
-                                    Token::LeftParen => block.push(self.read_call()?),
-                                    Token::Equal => block.push(self.read_assignment()?),
-                                    _ => unimplemented!("{:?}", t),
-                                }
-                            }
-                        }
-                        t => unimplemented!("{:?}", t),
-                    },
-                    None => panic!(),
-                },
+                Token::Ident(_) => prev = Some(self.read_ident()?),
+                Token::LeftParen => {
+                    block.push(self.read_call(prev.clone().ok_or_else(|| {
+                        Error::new("Expected ident before LeftParen, found nothing".to_string())
+                    })?)?)
+                }
+                Token::Equal => {
+                    block.push(self.read_assignment(prev.clone().ok_or_else(|| {
+                        Error::new("Expected ident before Equal, found nothing".to_string())
+                    })?)?)
+                }
                 Token::Return => block.push(self.read_return()?),
                 Token::If => block.push(self.read_if()?),
                 Token::End | Token::Else | Token::ElseIf => {
@@ -161,8 +154,7 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Block(block))
     }
 
-    fn read_assignment(&mut self) -> Result<AstNode, Error> {
-        let ident = self.read_ident()?;
+    fn read_assignment(&mut self, ident: AstNode) -> Result<AstNode, Error> {
         expect!(self.reader.next(), "Equal", Token::Equal)?;
         let expr = self.read_expression()?;
 
@@ -175,11 +167,10 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Return(Box::new(self.read_expression()?)))
     }
 
-    fn read_call(&mut self) -> Result<AstNode, Error> {
-        let variable = self.read_variable(None)?;
+    fn read_call(&mut self, ident: AstNode) -> Result<AstNode, Error> {
         let params = self.read_params()?;
 
-        Ok(AstNode::Call(Box::new(variable), params))
+        Ok(AstNode::Call(Box::new(ident), params))
     }
 
     fn read_value(&mut self) -> Result<AstNode, Error> {
@@ -369,9 +360,10 @@ impl<'a> AstConstructor<'a> {
         loop {
             let t = expect!(
                 self.reader.peek(0),
-                "Ident or Dot",
+                "Ident/Dot/LeftSquareBracket",
                 Token::Ident(_),
-                Token::Dot
+                Token::Dot,
+                Token::LeftSquareBracket
             );
 
             match t {
@@ -392,7 +384,16 @@ impl<'a> AstConstructor<'a> {
                             ident = Some(AstNode::Ident(s));
                         }
                     }
-                    Token::Dot => { self.reader.consume(1); dot_present = true; },
+                    Token::Dot => {
+                        self.reader.consume(1);
+                        dot_present = true;
+                    }
+                    Token::LeftSquareBracket => {
+                        ident = Some(AstNode::Index(
+                            Box::new(ident.unwrap()),
+                            Box::new(self.read_table_key()?),
+                        ));
+                    }
                     _ => panic!(),
                 },
                 Err(_) => break,
