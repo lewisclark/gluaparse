@@ -134,6 +134,16 @@ impl<'a> AstConstructor<'a> {
         while let Some(t) = self.reader.peek(0) {
             match t {
                 Token::Comma => self.reader.consume(1),
+                Token::DotDotDot => {
+                    self.reader.consume(1);
+                    exprs.push(AstNode::Vararg);
+
+                    if matches!(self.reader.peek(0), Some(Token::Comma)) {
+                        return Err(Error::new(
+                            "Vararg (...) must be the final parameter".to_string(),
+                        ));
+                    }
+                }
                 Token::RightParen | Token::RightSquareBracket | Token::RightCurlyBracket => break,
                 _ => exprs.push(reader(self)?),
             }
@@ -225,7 +235,8 @@ impl<'a> AstConstructor<'a> {
             Token::True,
             Token::False,
             Token::LeftCurlyBracket,
-            Token::LeftParen
+            Token::LeftParen,
+            Token::DotDotDot
         )?;
 
         match t {
@@ -244,6 +255,10 @@ impl<'a> AstConstructor<'a> {
                 expect!(self.reader.next(), "RightParen", Token::RightParen)?;
 
                 v
+            }
+            Token::DotDotDot => {
+                self.reader.consume(1);
+                Ok(AstNode::Vararg)
             }
             _ => panic!(),
         }
@@ -620,6 +635,8 @@ pub enum AstNode {
     /* key values */
     Table(Vec<AstNode>),
 
+    Vararg,
+
     Str(String),
     Int(isize),
     Float(f64),
@@ -677,6 +694,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Bool(b) => write!(f, "Bool {}", b),
             AstNode::KeyValue(_key, _value) => write!(f, "Key Value"),
             AstNode::Table(_kv) => write!(f, "Table"),
+            AstNode::Vararg => write!(f, "..."),
             _ => write!(f, "Unknown"),
         }
     }
