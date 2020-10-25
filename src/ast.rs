@@ -3,6 +3,9 @@ use crate::lexer::Token;
 use std::convert::From;
 use std::fmt::{self, Display};
 
+type AstResult = Result<AstNode, Error>;
+type VecAstResult = Result<Vec<AstNode>, Error>;
+
 macro_rules! expect {
     ( $found:expr, $expected_str:expr, $( $expected:pat ),+ ) => {
         match $found {
@@ -56,11 +59,11 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    pub fn create(mut self) -> Result<AstNode, Error> {
+    pub fn create(mut self) -> AstResult {
         self.read_chunk()
     }
 
-    fn read_func(&mut self) -> Result<AstNode, Error> {
+    fn read_func(&mut self) -> AstResult {
         expect!(self.reader.next(), "Function", Token::Function)?;
 
         let is_local = match self.reader.peek(-2) {
@@ -92,7 +95,7 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_params(&mut self) -> Result<Vec<AstNode>, Error> {
+    fn read_params(&mut self) -> VecAstResult {
         expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
         let params = self.read_comma_delimited()?;
         expect!(self.reader.next(), "RightParen", Token::RightParen)?;
@@ -100,7 +103,7 @@ impl<'a> AstConstructor<'a> {
         Ok(params)
     }
 
-    fn read_comma_delimited(&mut self) -> Result<Vec<AstNode>, Error> {
+    fn read_comma_delimited(&mut self) -> VecAstResult {
         let mut exprs = Vec::new();
 
         while let Some(t) = self.reader.peek(0) {
@@ -114,11 +117,11 @@ impl<'a> AstConstructor<'a> {
         Ok(exprs)
     }
 
-    fn read_chunk(&mut self) -> Result<AstNode, Error> {
+    fn read_chunk(&mut self) -> AstResult {
         self.read_block()
     }
 
-    fn read_block(&mut self) -> Result<AstNode, Error> {
+    fn read_block(&mut self) -> AstResult {
         let mut block = Vec::new();
         let mut prev = None;
 
@@ -154,26 +157,26 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Block(block))
     }
 
-    fn read_assignment(&mut self, ident: AstNode) -> Result<AstNode, Error> {
+    fn read_assignment(&mut self, ident: AstNode) -> AstResult {
         expect!(self.reader.next(), "Equal", Token::Equal)?;
         let expr = self.read_expression()?;
 
         Ok(AstNode::Assignment(Box::new(ident), Box::new(expr)))
     }
 
-    fn read_return(&mut self) -> Result<AstNode, Error> {
+    fn read_return(&mut self) -> AstResult {
         expect!(self.reader.next(), "Return", Token::Return)?;
 
         Ok(AstNode::Return(Box::new(self.read_expression()?)))
     }
 
-    fn read_call(&mut self, ident: AstNode) -> Result<AstNode, Error> {
+    fn read_call(&mut self, ident: AstNode) -> AstResult {
         let params = self.read_params()?;
 
         Ok(AstNode::Call(Box::new(ident), params))
     }
 
-    fn read_value(&mut self) -> Result<AstNode, Error> {
+    fn read_value(&mut self) -> AstResult {
         let t = expect!(
             self.reader.peek(0),
             "Value",
@@ -199,7 +202,7 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_table(&mut self) -> Result<AstNode, Error> {
+    fn read_table(&mut self) -> AstResult {
         expect!(
             self.reader.next(),
             "LeftCurlyBracket",
@@ -233,7 +236,7 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Table(kv))
     }
 
-    fn read_table_key(&mut self) -> Result<AstNode, Error> {
+    fn read_table_key(&mut self) -> AstResult {
         match expect!(
             self.reader.peek(0),
             "Table key",
@@ -260,7 +263,7 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_expression(&mut self) -> Result<AstNode, Error> {
+    fn read_expression(&mut self) -> AstResult {
         let left = self.read_value()?;
 
         match self.reader.peek(0) {
@@ -286,7 +289,7 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_binaryop(&mut self, left: AstNode) -> Result<AstNode, Error> {
+    fn read_binaryop(&mut self, left: AstNode) -> AstResult {
         let t = expect!(
             self.reader.next(),
             "Binary Operator",
@@ -343,7 +346,7 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_bool(&mut self) -> Result<AstNode, Error> {
+    fn read_bool(&mut self) -> AstResult {
         let t = expect!(self.reader.next(), "Bool", Token::True, Token::False)?;
 
         match t {
@@ -353,7 +356,7 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_ident(&mut self) -> Result<AstNode, Error> {
+    fn read_ident(&mut self) -> AstResult {
         let mut ident = None;
         let mut dot_present = false;
 
@@ -403,7 +406,7 @@ impl<'a> AstConstructor<'a> {
         Ok(ident.unwrap())
     }
 
-    fn read_variable(&mut self, is_local: Option<bool>) -> Result<AstNode, Error> {
+    fn read_variable(&mut self, is_local: Option<bool>) -> AstResult {
         let ident = self.read_ident()?;
 
         let is_local = match is_local {
@@ -417,7 +420,7 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Variable(Box::new(ident), is_local))
     }
 
-    fn read_str(&mut self) -> Result<AstNode, Error> {
+    fn read_str(&mut self) -> AstResult {
         let s = match expect!(self.reader.next(), "Str", Token::Str(_))? {
             Token::Str(s) => s,
             _ => panic!(),
@@ -426,7 +429,7 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Str(s.to_string()))
     }
 
-    fn read_int(&mut self) -> Result<AstNode, Error> {
+    fn read_int(&mut self) -> AstResult {
         let n = match expect!(self.reader.next(), "Int", Token::Int(_))? {
             Token::Int(n) => n,
             _ => panic!(),
@@ -435,7 +438,7 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Int(*n))
     }
 
-    fn read_float(&mut self) -> Result<AstNode, Error> {
+    fn read_float(&mut self) -> AstResult {
         let f = match expect!(self.reader.next(), "Float", Token::Float(_))? {
             Token::Float(f) => f,
             _ => panic!(),
@@ -444,7 +447,7 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Float(*f))
     }
 
-    fn read_if(&mut self) -> Result<AstNode, Error> {
+    fn read_if(&mut self) -> AstResult {
         expect!(self.reader.next(), "If", Token::If)?;
         let if_expr = self.read_expression()?;
         expect!(self.reader.next(), "Then", Token::Then)?;
