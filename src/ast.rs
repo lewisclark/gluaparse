@@ -637,6 +637,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Block(_) => write!(f, "Block"),
             AstNode::Function(params, _body) => write!(f, "Function {:?}", params),
             AstNode::Call(_ident, _params) => write!(f, "Call"),
+            AstNode::Declaration(_ident, _value) => write!(f, "Declaration"),
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
             AstNode::Ident(name) => write!(f, "Ident {}", name),
             AstNode::Expression(_expr) => write!(f, "Expression"),
@@ -674,6 +675,10 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Block(v) => v.clone(),
             AstNode::Function(_params, body) => vec![*body.clone()],
             AstNode::Call(ident, _params) => vec![*ident.clone()],
+            AstNode::Declaration(ident, value) => match value {
+                Some(v) => vec![*ident.clone(), *v.clone()],
+                None => vec![*ident.clone()],
+            },
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
             AstNode::Expression(expr) => vec![*expr.clone()],
             AstNode::Return(expr) => match expr {
