@@ -152,6 +152,7 @@ impl<'a> AstConstructor<'a> {
 
         while let Some(token) = self.reader.peek(0) {
             match token {
+                Token::Comment(_) => self.reader.consume(1),
                 Token::Do => {
                     self.reader.consume(1);
                     block.push(self.read_block()?);
