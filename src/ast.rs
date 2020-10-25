@@ -85,7 +85,7 @@ impl<'a> AstConstructor<'a> {
 
             Ok(AstNode::Function(params, body))
         } else {
-            let ident = self.read_variable(Some(is_local))?;
+            let ident = Box::new(self.read_ident()?);
 
             let has_colon_op = match self.reader.peek(-2) {
                 Some(t) => matches!(t, Token::Colon),
@@ -100,9 +100,12 @@ impl<'a> AstConstructor<'a> {
 
             let body = Box::new(self.read_block()?);
 
-            let func = AstNode::Function(params, body);
+            let func = Box::new(AstNode::Function(params, body));
 
-            Ok(AstNode::Assignment(Box::new(ident), Box::new(func)))
+            Ok(match is_local {
+                true => AstNode::Declaration(ident, Some(func)),
+                false => AstNode::Assignment(ident, func),
+            })
         }
     }
 
@@ -440,20 +443,6 @@ impl<'a> AstConstructor<'a> {
         Ok(ident.unwrap())
     }
 
-    fn read_variable(&mut self, is_local: Option<bool>) -> AstResult {
-        let ident = self.read_ident()?;
-
-        let is_local = match is_local {
-            Some(b) => b,
-            None => match self.reader.peek(-3) {
-                Some(t) => matches!(t, Token::Local),
-                None => false,
-            },
-        };
-
-        Ok(AstNode::Variable(Box::new(ident), is_local))
-    }
-
     fn read_str(&mut self) -> AstResult {
         let s = match expect!(self.reader.next(), "Str", Token::Str(_))? {
             Token::Str(s) => s,
@@ -538,17 +527,18 @@ pub enum AstNode {
     /* params, body */
     Function(Vec<AstNode>, Box<AstNode>),
 
-    /* variable, params */
+    /* ident, params */
     Call(Box<AstNode>, Vec<AstNode>),
+
+    /* ident, value */
+    /* A Declaration is a local variable declaration */
+    Declaration(Box<AstNode>, Option<Box<AstNode>>),
 
     /* ident, value */
     Assignment(Box<AstNode>, Box<AstNode>),
 
     /* name */
     Ident(String),
-
-    /* ident, is_local */
-    Variable(Box<AstNode>, bool),
 
     /* expr */
     Expression(Box<AstNode>),
@@ -646,17 +636,9 @@ impl ptree::item::TreeItem for AstNode {
         match self {
             AstNode::Block(_) => write!(f, "Block"),
             AstNode::Function(params, _body) => write!(f, "Function {:?}", params),
-            AstNode::Call(_variable, _params) => write!(f, "Call"),
+            AstNode::Call(_ident, _params) => write!(f, "Call"),
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
             AstNode::Ident(name) => write!(f, "Ident {}", name),
-            AstNode::Variable(_name, is_local) => write!(
-                f,
-                "Variable ({})",
-                match is_local {
-                    true => "local",
-                    false => "non-local",
-                },
-            ),
             AstNode::Expression(_expr) => write!(f, "Expression"),
             AstNode::Return(_expr) => write!(f, "Return"),
             AstNode::If(_stubs) => write!(f, "If"),
@@ -691,9 +673,8 @@ impl ptree::item::TreeItem for AstNode {
         let v = match self {
             AstNode::Block(v) => v.clone(),
             AstNode::Function(_params, body) => vec![*body.clone()],
-            AstNode::Call(variable, _params) => vec![*variable.clone()],
+            AstNode::Call(ident, _params) => vec![*ident.clone()],
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
-            AstNode::Variable(name, _is_local) => vec![*name.clone()],
             AstNode::Expression(expr) => vec![*expr.clone()],
             AstNode::Return(expr) => match expr {
                 Some(expr) => vec![*expr.clone()],
