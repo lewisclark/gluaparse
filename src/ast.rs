@@ -95,10 +95,7 @@ impl<'a> AstConstructor<'a> {
             let mut params = self.read_params()?;
 
             if has_colon_op {
-                params.insert(
-                    0,
-                    AstNode::Expression(Box::new(AstNode::Ident("self".to_string()))),
-                );
+                params.insert(0, AstNode::Ident("self".to_string()));
             }
 
             let body = Box::new(self.read_block()?);
@@ -111,20 +108,31 @@ impl<'a> AstConstructor<'a> {
 
     fn read_params(&mut self) -> VecAstResult {
         expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
-        let params = self.read_comma_delimited()?;
+        let params = self.read_comma_delimited(AstConstructor::read_ident)?;
         expect!(self.reader.next(), "RightParen", Token::RightParen)?;
 
         Ok(params)
     }
 
-    fn read_comma_delimited(&mut self) -> VecAstResult {
+    fn read_arguments(&mut self) -> VecAstResult {
+        expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
+        let params = self.read_comma_delimited(AstConstructor::read_expression)?;
+        expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+
+        Ok(params)
+    }
+
+    fn read_comma_delimited<F>(&mut self, reader: F) -> VecAstResult
+    where
+        F: Fn(&mut Self) -> AstResult,
+    {
         let mut exprs = Vec::new();
 
         while let Some(t) = self.reader.peek(0) {
             match t {
                 Token::Comma => self.reader.consume(1),
                 Token::RightParen | Token::RightSquareBracket | Token::RightCurlyBracket => break,
-                _ => exprs.push(self.read_expression()?),
+                _ => exprs.push(reader(self)?),
             }
         }
 
@@ -196,7 +204,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_call(&mut self, ident: AstNode) -> AstResult {
-        let params = self.read_params()?;
+        let params = self.read_arguments()?;
 
         Ok(AstNode::Call(Box::new(ident), params))
     }

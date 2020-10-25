@@ -37,3 +37,5 @@ dog.meow[69] = "ok"
 function ok:yeet(yeehaw, no)
 
 end
+
+ok:yeet(yes, "ooof")
