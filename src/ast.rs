@@ -181,7 +181,18 @@ impl<'a> AstConstructor<'a> {
     fn read_return(&mut self) -> AstResult {
         expect!(self.reader.next(), "Return", Token::Return)?;
 
-        Ok(AstNode::Return(Box::new(self.read_expression()?)))
+        let expr = match self.reader.peek(0) {
+            Some(t) => {
+                if matches!(t, Token::End) {
+                    None
+                } else {
+                    Some(Box::new(self.read_expression()?))
+                }
+            }
+            None => panic!(),
+        };
+
+        Ok(AstNode::Return(expr))
     }
 
     fn read_call(&mut self, ident: AstNode) -> AstResult {
@@ -535,7 +546,7 @@ pub enum AstNode {
     Expression(Box<AstNode>),
 
     /* expr */
-    Return(Box<AstNode>),
+    Return(Option<Box<AstNode>>),
 
     /* left expr, right expr */
     Add(Box<AstNode>, Box<AstNode>),
@@ -676,7 +687,10 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
             AstNode::Variable(name, _is_local) => vec![*name.clone()],
             AstNode::Expression(expr) => vec![*expr.clone()],
-            AstNode::Return(expr) => vec![*expr.clone()],
+            AstNode::Return(expr) => match expr {
+                Some(expr) => vec![*expr.clone()],
+                None => vec![],
+            },
             AstNode::If(stubs) => stubs.to_vec(),
             AstNode::IfStub(cond, body) => {
                 if let Some(cond) = cond {

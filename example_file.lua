@@ -33,3 +33,7 @@ dog.meow.aa = false
 
 dog.meow[yeet] = "ok"
 dog.meow[69] = "ok"
+
+function ok:yeet(yeehaw, no)
+
+end
