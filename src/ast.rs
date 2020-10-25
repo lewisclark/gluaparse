@@ -277,15 +277,22 @@ impl<'a> AstConstructor<'a> {
             if matches!(t, Token::RightCurlyBracket) {
                 break;
             } else {
-                let key = self.read_table_key()?;
-                expect!(self.reader.next(), "Equal", Token::Equal)?;
+                let key = match self.read_table_key()? {
+                    Some(key) => {
+                        expect!(self.reader.next(), "Equal", Token::Equal)?;
+
+                        Some(Box::new(key))
+                    }
+                    None => None,
+                };
+
                 let val = self.read_value()?;
 
                 if self.reader.peek(0) == Some(&Token::Comma) {
                     self.reader.consume(1);
                 }
 
-                kv.push(AstNode::KeyValue(Box::new(key), Box::new(val)));
+                kv.push(AstNode::TableValue(key, Box::new(val)));
             }
         }
 
@@ -298,30 +305,31 @@ impl<'a> AstConstructor<'a> {
         Ok(AstNode::Table(kv))
     }
 
-    fn read_table_key(&mut self) -> AstResult {
-        match expect!(
-            self.reader.peek(0),
-            "Table key",
-            Token::LeftSquareBracket,
-            Token::Ident(_)
-        )? {
+    fn read_table_key(&mut self) -> Result<Option<AstNode>, Error> {
+        match self.reader.peek(0).unwrap() {
             Token::LeftSquareBracket => {
                 expect!(
                     self.reader.next(),
                     "LeftSquareBracket",
                     Token::LeftSquareBracket
                 )?;
-                let k = self.read_value();
+                let k = self.read_value()?;
                 expect!(
                     self.reader.next(),
                     "RightSquareBracket",
                     Token::RightSquareBracket
                 )?;
 
-                k
+                Ok(Some(k))
             }
-            Token::Ident(_) => self.read_ident(),
-            _ => panic!(),
+            Token::Ident(_) => {
+                if matches!(self.reader.peek(1), Some(Token::Equal)) {
+                    Ok(Some(self.read_ident()?))
+                } else {
+                    Ok(None)
+                }
+            }
+            _ => Ok(None),
         }
     }
 
@@ -457,7 +465,7 @@ impl<'a> AstConstructor<'a> {
                     Token::LeftSquareBracket => {
                         ident = Some(AstNode::Index(
                             Box::new(ident.unwrap()),
-                            Box::new(self.read_table_key()?),
+                            Box::new(self.read_table_key()?.unwrap()),
                         ));
                     }
                     _ => panic!(),
@@ -630,7 +638,7 @@ pub enum AstNode {
     If(Vec<AstNode>),
 
     /* key, val */
-    KeyValue(Box<AstNode>, Box<AstNode>),
+    TableValue(Option<Box<AstNode>>, Box<AstNode>),
 
     /* key values */
     Table(Vec<AstNode>),
@@ -692,7 +700,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
-            AstNode::KeyValue(_key, _value) => write!(f, "Key Value"),
+            AstNode::TableValue(_key, _value) => write!(f, "Table Value"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
             _ => write!(f, "Unknown"),
@@ -738,7 +746,10 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Index(t, k) => vec![*t.clone(), *k.clone()],
-            AstNode::KeyValue(key, value) => vec![*key.clone(), *value.clone()],
+            AstNode::TableValue(key, value) => match key {
+                Some(key) => vec![*key.clone(), *value.clone()],
+                None => vec![*value.clone()],
+            },
             AstNode::Table(kv) => kv.clone(),
             _ => vec![],
         };
