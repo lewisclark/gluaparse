@@ -224,7 +224,8 @@ impl<'a> AstConstructor<'a> {
             Token::Float(_),
             Token::True,
             Token::False,
-            Token::LeftCurlyBracket
+            Token::LeftCurlyBracket,
+            Token::LeftParen
         )?;
 
         match t {
@@ -235,6 +236,15 @@ impl<'a> AstConstructor<'a> {
             Token::Float(_) => self.read_float(),
             Token::True | Token::False => self.read_bool(),
             Token::LeftCurlyBracket => self.read_table(),
+            Token::LeftParen => {
+                self.reader.consume(1);
+
+                let v = self.read_value();
+
+                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+
+                v
+            }
             _ => panic!(),
         }
     }
@@ -347,7 +357,7 @@ impl<'a> AstConstructor<'a> {
             Token::Or
         )?;
 
-        let left = Box::new(left);
+        let left = Box::new(AstNode::Expression(Box::new(left)));
 
         match t {
             Token::Plus => Ok(AstNode::Add(left, Box::new(self.read_expression()?))),
