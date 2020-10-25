@@ -86,7 +86,21 @@ impl<'a> AstConstructor<'a> {
             Ok(AstNode::Function(params, body))
         } else {
             let ident = self.read_variable(Some(is_local))?;
-            let params = self.read_params()?;
+
+            let has_colon_op = match self.reader.peek(-2) {
+                Some(t) => matches!(t, Token::Colon),
+                None => false,
+            };
+
+            let mut params = self.read_params()?;
+
+            if has_colon_op {
+                params.insert(
+                    0,
+                    AstNode::Expression(Box::new(AstNode::Ident("self".to_string()))),
+                );
+            }
+
             let body = Box::new(self.read_block()?);
 
             let func = AstNode::Function(params, body);
@@ -366,7 +380,8 @@ impl<'a> AstConstructor<'a> {
                 "Ident/Dot/LeftSquareBracket",
                 Token::Ident(_),
                 Token::Dot,
-                Token::LeftSquareBracket
+                Token::LeftSquareBracket,
+                Token::Colon
             );
 
             match t {
@@ -387,7 +402,7 @@ impl<'a> AstConstructor<'a> {
                             ident = Some(AstNode::Ident(s));
                         }
                     }
-                    Token::Dot => {
+                    Token::Dot | Token::Colon => {
                         self.reader.consume(1);
                         dot_present = true;
                     }

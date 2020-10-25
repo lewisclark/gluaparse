@@ -249,7 +249,7 @@ impl<'a> Lexer<'a> {
                     } else {
                         Token::Dot
                     }
-                },
+                }
                 ':' => Token::Colon,
                 '=' => {
                     if self.reader.peek() == '=' {
