@@ -249,7 +249,8 @@ impl<'a> Lexer<'a> {
                     } else {
                         Token::Dot
                     }
-                }
+                },
+                ':' => Token::Colon,
                 '=' => {
                     if self.reader.peek() == '=' {
                         self.reader.advance(1);
@@ -390,6 +391,7 @@ pub enum Token<'a> {
     RightSquareBracket,
     Dot,
     DotDotDot,
+    Colon,
 
     // Binary operators
     Plus,
