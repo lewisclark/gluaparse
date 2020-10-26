@@ -251,7 +251,6 @@ impl<'a> AstConstructor<'a> {
             Token::False,
             Token::Nil,
             Token::LeftCurlyBracket,
-            Token::LeftParen,
             Token::DotDotDot
         )?;
 
@@ -264,15 +263,6 @@ impl<'a> AstConstructor<'a> {
             Token::True | Token::False => self.read_bool(),
             Token::Nil => self.read_nil(),
             Token::LeftCurlyBracket => self.read_table(),
-            Token::LeftParen => {
-                self.reader.consume(1);
-
-                let v = self.read_value();
-
-                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
-
-                v
-            }
             Token::DotDotDot => {
                 self.reader.consume(1);
                 Ok(AstNode::Vararg)
@@ -352,6 +342,13 @@ impl<'a> AstConstructor<'a> {
     fn read_expression(&mut self) -> AstResult {
         match self.reader.peek(0).unwrap() {
             Token::Not | Token::Hashtag => self.read_unaryop(),
+            Token::LeftParen => {
+                self.reader.consume(1);
+                let expr = self.read_expression()?;
+                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+
+                Ok(expr)
+            }
             _ => {
                 let left = self.read_value()?;
 
