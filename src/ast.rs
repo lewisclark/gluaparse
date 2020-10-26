@@ -187,7 +187,7 @@ impl<'a> AstConstructor<'a> {
                 Token::Ident(_) => prev = Some(self.read_ident()?),
                 Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
                     block.push(self.read_call(prev.clone().ok_or_else(|| {
-                        Error::new("Expected ident before LeftParen, found nothing".to_string())
+                        Error::new("Expected ident before LeftParen/Str/LeftCurlyBracket for call, found nothing".to_string())
                     })?)?)
                 }
                 Token::Equal => {
