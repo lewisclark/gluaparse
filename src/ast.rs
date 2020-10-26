@@ -682,8 +682,6 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
             AstNode::Ident(name) => write!(f, "Ident {}", name),
             AstNode::Return(_expr) => write!(f, "Return"),
-            AstNode::If(_stubs) => write!(f, "If"),
-            AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
             AstNode::Add(_left, _right) => write!(f, "Add"),
             AstNode::Subtract(_left, _right) => write!(f, "Subtract"),
             AstNode::Multiply(_left, _right) => write!(f, "Multiply"),
@@ -700,14 +698,16 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Or(_left, _right) => write!(f, "Or"),
             AstNode::Index(_t, _k) => write!(f, "Index"),
+            AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
+            AstNode::If(_stubs) => write!(f, "If"),
+            AstNode::TableValue(_key, _value) => write!(f, "Table Value"),
+            AstNode::Table(_kv) => write!(f, "Table"),
+            AstNode::Vararg => write!(f, "..."),
             AstNode::Str(s) => write!(f, "Str \"{}\"", s),
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
             AstNode::Nil => write!(f, "Nil"),
-            AstNode::TableValue(_key, _value) => write!(f, "Table Value"),
-            AstNode::Table(_kv) => write!(f, "Table"),
-            AstNode::Vararg => write!(f, "..."),
         }
     }
 
@@ -729,14 +729,6 @@ impl ptree::item::TreeItem for AstNode {
                 Some(expr) => vec![*expr.clone()],
                 None => vec![],
             },
-            AstNode::If(stubs) => stubs.to_vec(),
-            AstNode::IfStub(cond, body) => {
-                if let Some(cond) = cond {
-                    vec![*cond.clone(), *body.clone()]
-                } else {
-                    vec![*body.clone()]
-                }
-            }
             AstNode::Add(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Subtract(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Multiply(left, right) => vec![*left.clone(), *right.clone()],
@@ -753,6 +745,14 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Index(t, k) => vec![*t.clone(), *k.clone()],
+            AstNode::IfStub(cond, body) => {
+                if let Some(cond) = cond {
+                    vec![*cond.clone(), *body.clone()]
+                } else {
+                    vec![*body.clone()]
+                }
+            }
+            AstNode::If(stubs) => stubs.to_vec(),
             AstNode::TableValue(key, value) => match key {
                 Some(key) => vec![*key.clone(), *value.clone()],
                 None => vec![*value.clone()],
