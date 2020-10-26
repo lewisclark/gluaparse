@@ -352,10 +352,10 @@ impl<'a> AstConstructor<'a> {
                 | Token::EqualEqual
                 | Token::NotEqual
                 | Token::And
-                | Token::Or => Ok(AstNode::Expression(Box::new(self.read_binaryop(left)?))),
-                _ => Ok(AstNode::Expression(Box::new(left))),
+                | Token::Or => Ok(self.read_binaryop(left)?),
+                _ => Ok(left),
             },
-            None => Ok(AstNode::Expression(Box::new(left))),
+            None => Ok(left),
         }
     }
 
@@ -380,7 +380,7 @@ impl<'a> AstConstructor<'a> {
             Token::Or
         )?;
 
-        let left = Box::new(AstNode::Expression(Box::new(left)));
+        let left = Box::new(left);
 
         match t {
             Token::Plus => Ok(AstNode::Add(left, Box::new(self.read_expression()?))),
@@ -575,9 +575,6 @@ pub enum AstNode {
     Ident(String),
 
     /* expr */
-    Expression(Box<AstNode>),
-
-    /* expr */
     Return(Option<Box<AstNode>>),
 
     /* left expr, right expr */
@@ -675,7 +672,6 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Declaration(_ident, _value) => write!(f, "Declaration"),
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
             AstNode::Ident(name) => write!(f, "Ident {}", name),
-            AstNode::Expression(_expr) => write!(f, "Expression"),
             AstNode::Return(_expr) => write!(f, "Return"),
             AstNode::If(_stubs) => write!(f, "If"),
             AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
@@ -719,7 +715,6 @@ impl ptree::item::TreeItem for AstNode {
                 None => vec![*ident.clone()],
             },
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
-            AstNode::Expression(expr) => vec![*expr.clone()],
             AstNode::Return(expr) => match expr {
                 Some(expr) => vec![*expr.clone()],
                 None => vec![],
