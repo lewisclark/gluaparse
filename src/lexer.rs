@@ -44,6 +44,10 @@ impl<'a> Reader<'a> {
         let start = (self.pos as isize + shift) as usize;
 
         loop {
+            if self.eof() {
+                break;
+            }
+
             let c = self.code[self.pos] as char;
             let cnext = match self.pos + 1 >= self.code.len() {
                 true => None,
