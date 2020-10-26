@@ -709,7 +709,11 @@ impl ptree::item::TreeItem for AstNode {
         let v = match self {
             AstNode::Block(v) => v.clone(),
             AstNode::Function(_params, body) => vec![*body.clone()],
-            AstNode::Call(ident, _params) => vec![*ident.clone()],
+            AstNode::Call(ident, params) => {
+                let mut v = params.clone();
+                v.insert(0, *ident.clone());
+                v
+            }
             AstNode::Declaration(ident, value) => match value {
                 Some(v) => vec![*ident.clone(), *v.clone()],
                 None => vec![*ident.clone()],
