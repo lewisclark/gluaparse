@@ -234,6 +234,7 @@ impl<'a> AstConstructor<'a> {
             Token::Float(_),
             Token::True,
             Token::False,
+            Token::Nil,
             Token::LeftCurlyBracket,
             Token::LeftParen,
             Token::DotDotDot
@@ -246,6 +247,7 @@ impl<'a> AstConstructor<'a> {
             Token::Int(_) => self.read_int(),
             Token::Float(_) => self.read_float(),
             Token::True | Token::False => self.read_bool(),
+            Token::Nil => self.read_nil(),
             Token::LeftCurlyBracket => self.read_table(),
             Token::LeftParen => {
                 self.reader.consume(1);
@@ -424,6 +426,12 @@ impl<'a> AstConstructor<'a> {
             Token::False => Ok(AstNode::Bool(false)),
             _ => panic!(),
         }
+    }
+
+    fn read_nil(&mut self) -> AstResult {
+        expect!(self.reader.next(), "Nil", Token::Nil)?;
+
+        Ok(AstNode::Nil)
     }
 
     fn read_ident(&mut self) -> AstResult {
@@ -646,6 +654,7 @@ pub enum AstNode {
     Int(isize),
     Float(f64),
     Bool(bool),
+    Nil,
 }
 
 impl Display for AstNode {
@@ -695,6 +704,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Int(i) => write!(f, "Int {}", i),
             AstNode::Float(fl) => write!(f, "Float {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
+            AstNode::Nil => write!(f, "Nil"),
             AstNode::TableValue(_key, _value) => write!(f, "Table Value"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
