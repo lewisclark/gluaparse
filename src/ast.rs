@@ -649,7 +649,6 @@ pub enum AstNode {
     Int(isize),
     Float(f64),
     Bool(bool),
-    Invalid,
 }
 
 impl Display for AstNode {
@@ -703,7 +702,6 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::TableValue(_key, _value) => write!(f, "Table Value"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
-            _ => write!(f, "Unknown"),
         }
     }
 
