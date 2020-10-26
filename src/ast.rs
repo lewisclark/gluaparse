@@ -554,7 +554,7 @@ impl<'a> AstConstructor<'a> {
 
 /* ---------- AstNode ---------- */
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     Block(Vec<AstNode>),
 
