@@ -691,10 +691,7 @@ impl ptree::item::TreeItem for AstNode {
         match self {
             AstNode::Block(_) => write!(f, "Block"),
             AstNode::Function(params, _body) => write!(f, "Function {:?}", params),
-            AstNode::Call(ident, _params) => match &**ident {
-                AstNode::Ident(ident) => write!(f, "Call {}", ident),
-                _ => panic!(),
-            },
+            AstNode::Call(_ident, _params) => write!(f, "Call"),
             AstNode::Declaration(_ident, _value) => write!(f, "Declaration"),
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
             AstNode::Ident(name) => write!(f, "Ident {}", name),
@@ -732,7 +729,12 @@ impl ptree::item::TreeItem for AstNode {
         let v = match self {
             AstNode::Block(v) => v.clone(),
             AstNode::Function(_params, body) => vec![*body.clone()],
-            AstNode::Call(_ident, params) => params.clone(),
+            AstNode::Call(ident, params) => {
+                let mut v = params.clone();
+                v.insert(0, *ident.clone());
+
+                v
+            }
             AstNode::Declaration(ident, value) => match value {
                 Some(v) => vec![*ident.clone(), *v.clone()],
                 None => vec![*ident.clone()],
