@@ -118,11 +118,26 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_arguments(&mut self) -> VecAstResult {
-        expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
-        let params = self.read_comma_delimited(AstConstructor::read_expression)?;
-        expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+        let t = expect!(
+            self.reader.peek(0),
+            "LeftParen/Str/LeftCurlyBracket",
+            Token::LeftParen,
+            Token::Str(_),
+            Token::LeftCurlyBracket
+        )?;
 
-        Ok(params)
+        Ok(match t {
+            Token::LeftParen => {
+                self.reader.consume(1);
+                let args = self.read_comma_delimited(AstConstructor::read_expression)?;
+                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+
+                args
+            }
+            Token::Str(_) => vec![self.read_str()?],
+            Token::LeftCurlyBracket => vec![self.read_table()?],
+            _ => panic!(),
+        })
     }
 
     fn read_comma_delimited<F>(&mut self, reader: F) -> VecAstResult
@@ -170,7 +185,7 @@ impl<'a> AstConstructor<'a> {
                 Token::Local => self.reader.consume(1),
                 Token::Function => block.push(self.read_func()?),
                 Token::Ident(_) => prev = Some(self.read_ident()?),
-                Token::LeftParen => {
+                Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
                     block.push(self.read_call(prev.clone().ok_or_else(|| {
                         Error::new("Expected ident before LeftParen, found nothing".to_string())
                     })?)?)
