@@ -279,22 +279,21 @@ impl<'a> AstConstructor<'a> {
             if matches!(t, Token::RightCurlyBracket) {
                 break;
             } else {
-                let key = match self.read_table_key()? {
+                let node = match self.read_table_key()? {
                     Some(key) => {
                         expect!(self.reader.next(), "Equal", Token::Equal)?;
+                        let val = self.read_value()?;
 
-                        Some(Box::new(key))
+                        AstNode::KeyValue(Box::new(key), Box::new(val))
                     }
-                    None => None,
+                    None => self.read_value()?,
                 };
-
-                let val = self.read_value()?;
 
                 if self.reader.peek(0) == Some(&Token::Comma) {
                     self.reader.consume(1);
                 }
 
-                kv.push(AstNode::TableValue(key, Box::new(val)));
+                kv.push(node);
             }
         }
 
@@ -643,7 +642,7 @@ pub enum AstNode {
     If(Vec<AstNode>),
 
     /* key, val */
-    TableValue(Option<Box<AstNode>>, Box<AstNode>),
+    KeyValue(Box<AstNode>, Box<AstNode>),
 
     /* key values */
     Table(Vec<AstNode>),
@@ -703,7 +702,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Index(_t, _k) => write!(f, "Index"),
             AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
             AstNode::If(_stubs) => write!(f, "If"),
-            AstNode::TableValue(_key, _value) => write!(f, "Table Value"),
+            AstNode::KeyValue(_key, _value) => write!(f, "KeyValue"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
             AstNode::Str(s) => write!(f, "Str \"{}\"", s),
@@ -752,10 +751,7 @@ impl ptree::item::TreeItem for AstNode {
                 }
             }
             AstNode::If(stubs) => stubs.to_vec(),
-            AstNode::TableValue(key, value) => match key {
-                Some(key) => vec![*key.clone(), *value.clone()],
-                None => vec![*value.clone()],
-            },
+            AstNode::KeyValue(key, value) => vec![*key.clone(), *value.clone()],
             AstNode::Table(kv) => kv.clone(),
             _ => vec![],
         };
