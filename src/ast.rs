@@ -350,28 +350,33 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_expression(&mut self) -> AstResult {
-        let left = self.read_value()?;
+        match self.reader.peek(0).unwrap() {
+            Token::Not | Token::Hashtag => self.read_unaryop(),
+            _ => {
+                let left = self.read_value()?;
 
-        match self.reader.peek(0) {
-            Some(t) => match t {
-                Token::Plus
-                | Token::Minus
-                | Token::Asterisk
-                | Token::Slash
-                | Token::Caret
-                | Token::Percent
-                | Token::DotDot
-                | Token::LeftAngleBracket
-                | Token::LeftAngleBracketEqual
-                | Token::RightAngleBracket
-                | Token::RightAngleBracketEqual
-                | Token::EqualEqual
-                | Token::NotEqual
-                | Token::And
-                | Token::Or => Ok(self.read_binaryop(left)?),
-                _ => Ok(left),
-            },
-            None => Ok(left),
+                match self.reader.peek(0) {
+                    Some(t) => match t {
+                        Token::Plus
+                        | Token::Minus
+                        | Token::Asterisk
+                        | Token::Slash
+                        | Token::Caret
+                        | Token::Percent
+                        | Token::DotDot
+                        | Token::LeftAngleBracket
+                        | Token::LeftAngleBracketEqual
+                        | Token::RightAngleBracket
+                        | Token::RightAngleBracketEqual
+                        | Token::EqualEqual
+                        | Token::NotEqual
+                        | Token::And
+                        | Token::Or => self.read_binaryop(left),
+                        _ => Ok(left),
+                    },
+                    None => Ok(left),
+                }
+            }
         }
     }
 
@@ -430,6 +435,21 @@ impl<'a> AstConstructor<'a> {
             Token::Or => Ok(AstNode::Or(left, Box::new(self.read_expression()?))),
             _ => panic!(),
         }
+    }
+
+    fn read_unaryop(&mut self) -> AstResult {
+        let t = expect!(
+            self.reader.next(),
+            "Not/Hashtag",
+            Token::Not,
+            Token::Hashtag
+        )?;
+
+        Ok(match t {
+            Token::Not => AstNode::Not(Box::new(self.read_expression()?)),
+            Token::Hashtag => AstNode::Length(Box::new(self.read_expression()?)),
+            _ => panic!(),
+        })
     }
 
     fn read_bool(&mut self) -> AstResult {
@@ -644,6 +664,12 @@ pub enum AstNode {
     /* left expr, right expr */
     Or(Box<AstNode>, Box<AstNode>),
 
+    /* expr */
+    Not(Box<AstNode>),
+
+    /* expr */
+    Length(Box<AstNode>),
+
     /* table, key */
     Index(Box<AstNode>, Box<AstNode>),
 
@@ -711,6 +737,8 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(_left, _right) => write!(f, "NotEqual"),
             AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Or(_left, _right) => write!(f, "Or"),
+            AstNode::Not(_expr) => write!(f, "Not"),
+            AstNode::Length(_expr) => write!(f, "Length"),
             AstNode::Index(_t, _k) => write!(f, "Index"),
             AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
             AstNode::If(_stubs) => write!(f, "If"),
@@ -759,6 +787,8 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Not(expr) => vec![*expr.clone()],
+            AstNode::Length(expr) => vec![*expr.clone()],
             AstNode::Index(t, k) => vec![*t.clone(), *k.clone()],
             AstNode::IfStub(cond, body) => {
                 if let Some(cond) = cond {
