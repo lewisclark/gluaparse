@@ -233,9 +233,18 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_call(&mut self, ident: AstNode) -> AstResult {
-        let params = self.read_arguments()?;
+        let has_colon_op = match self.reader.peek(-2) {
+            Some(t) => matches!(t, Token::Colon),
+            None => false,
+        };
 
-        Ok(AstNode::Call(Box::new(ident), params))
+        let mut args = self.read_arguments()?;
+
+        if has_colon_op {
+            args.insert(0, AstNode::Ident("self".to_string()));
+        }
+
+        Ok(AstNode::Call(Box::new(ident), args))
     }
 
     fn read_value(&mut self) -> AstResult {
