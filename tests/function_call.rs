@@ -43,3 +43,63 @@ fn func_call_indexed() {
         )]),
     )
 }
+
+#[test]
+fn func_call_self() {
+    assert_eq!(
+        parse("t1:test()").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Index(
+                Box::new(AstNode::Ident("t1".to_string())),
+                Box::new(AstNode::Ident("test".to_string())),
+            )),
+            vec![AstNode::Ident("self".to_string()),],
+        )])
+    )
+}
+
+#[test]
+fn func_call_self_args() {
+    assert_eq!(
+        parse("t1:test(a, b, c)").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Index(
+                Box::new(AstNode::Ident("t1".to_string())),
+                Box::new(AstNode::Ident("test".to_string())),
+            )),
+            vec![
+                AstNode::Ident("self".to_string()),
+                AstNode::Ident("a".to_string()),
+                AstNode::Ident("b".to_string()),
+                AstNode::Ident("c".to_string()),
+            ],
+        )])
+    )
+}
+
+#[test]
+fn func_call_vararg() {
+    assert_eq!(
+        parse("test(...)").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Ident("test".to_string())),
+            vec![AstNode::Vararg],
+        )]),
+    )
+}
+
+#[test]
+fn func_call_vararg_args() {
+    assert_eq!(
+        parse("test(a, b, c, ...)").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Ident("test".to_string())),
+            vec![
+                AstNode::Ident("a".to_string()),
+                AstNode::Ident("b".to_string()),
+                AstNode::Ident("c".to_string()),
+                AstNode::Vararg,
+            ],
+        )]),
+    )
+}
