@@ -29,8 +29,8 @@ impl<'a> Reader<'a> {
         c
     }
 
-    pub fn peek(&self) -> char {
-        self.code[self.pos] as char
+    pub fn peek(&self, pos: isize) -> char {
+        self.code[(self.pos as isize + pos) as usize] as char
     }
 
     pub fn advance(&mut self, amount: usize) {
@@ -94,7 +94,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_num(&mut self, c: char) -> Result<Token<'a>, Error> {
-        if c == '0' && self.reader.peek().to_ascii_lowercase() == 'x' {
+        if c == '0' && self.reader.peek(0).to_ascii_lowercase() == 'x' {
             self.reader.advance(1);
             let num = self.reader.read_until(0, |c, _| !c.is_digit(16));
 
@@ -123,7 +123,7 @@ impl<'a> Lexer<'a> {
     fn read_comment_single(&mut self) -> Token<'a> {
         let s = self
             .reader
-            .read_until(-1, |c, cnext| c == '\n' || cnext.is_none());
+            .read_until(0, |c, cnext| c == '\n' || cnext.is_none());
 
         self.reader.advance(1);
 
@@ -131,9 +131,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_comment_multi(&mut self, is_cstyle: bool) -> Token<'a> {
-        self.reader.advance(1);
-
         let s = if is_cstyle {
+            self.reader.advance(1);
+
             self.reader.read_until(0, |c, cnext| {
                 c == '*'
                     && match cnext {
@@ -142,6 +142,8 @@ impl<'a> Lexer<'a> {
                     }
             })
         } else {
+            self.reader.advance(2);
+
             self.reader.read_until(0, |c, cnext| {
                 c == ']'
                     && match cnext {
@@ -167,21 +169,21 @@ impl<'a> Lexer<'a> {
             let token = match c {
                 ',' => Token::Comma,
                 '+' => {
-                    if self.reader.peek().is_digit(10) {
+                    if self.reader.peek(0).is_digit(10) {
                         self.read_num(c)?
                     } else {
                         Token::Plus
                     }
                 }
                 '-' => {
-                    let p = self.reader.peek();
+                    let p = self.reader.peek(0);
 
                     if p.is_digit(10) {
                         self.read_num(c)?
                     } else if p == '-' {
                         self.reader.advance(1);
 
-                        if self.reader.char() == '[' && self.reader.peek() == '[' {
+                        if self.reader.peek(0) == '[' && self.reader.peek(1) == '[' {
                             self.read_comment_multi(false)
                         } else {
                             self.read_comment_single()
@@ -192,10 +194,10 @@ impl<'a> Lexer<'a> {
                 }
                 '*' => Token::Asterisk,
                 '/' => {
-                    let p = self.reader.peek();
+                    let p = self.reader.peek(0);
 
                     if p == '/' {
-                        self.reader.advance(2);
+                        self.reader.advance(1);
                         self.read_comment_single()
                     } else if p == '*' {
                         self.read_comment_multi(true)
@@ -211,7 +213,7 @@ impl<'a> Lexer<'a> {
                 ')' => Token::RightParen,
                 '#' => Token::Hashtag,
                 '<' => {
-                    if self.reader.peek() == '=' {
+                    if self.reader.peek(0) == '=' {
                         self.reader.advance(1);
 
                         Token::LeftAngleBracketEqual
@@ -220,7 +222,7 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '>' => {
-                    if self.reader.peek() == '=' {
+                    if self.reader.peek(0) == '=' {
                         self.reader.advance(1);
 
                         Token::RightAngleBracketEqual
@@ -236,12 +238,12 @@ impl<'a> Lexer<'a> {
                     Token::NotEqual
                 }
                 '.' => {
-                    let p = self.reader.peek();
+                    let p = self.reader.peek(0);
 
                     if p == '.' {
                         self.reader.advance(1);
 
-                        if self.reader.peek() == '.' {
+                        if self.reader.peek(0) == '.' {
                             self.reader.advance(1);
 
                             Token::DotDotDot
@@ -256,7 +258,7 @@ impl<'a> Lexer<'a> {
                 }
                 ':' => Token::Colon,
                 '=' => {
-                    if self.reader.peek() == '=' {
+                    if self.reader.peek(0) == '=' {
                         self.reader.advance(1);
 
                         Token::EqualEqual
@@ -274,7 +276,7 @@ impl<'a> Lexer<'a> {
                     }
                 }
                 '[' => {
-                    if self.reader.peek() == '[' {
+                    if self.reader.peek(0) == '[' {
                         self.reader.advance(1);
                         let s = self.reader.read_until(0, |c, cnext| {
                             c == ']'
@@ -292,7 +294,7 @@ impl<'a> Lexer<'a> {
                 }
                 ']' => Token::RightSquareBracket,
                 '!' => {
-                    if self.reader.peek() == '=' {
+                    if self.reader.peek(0) == '=' {
                         self.reader.advance(1);
 
                         Token::NotEqual
