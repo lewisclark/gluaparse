@@ -196,7 +196,10 @@ impl<'a> AstConstructor<'a> {
                 Token::Ident(_) => prev = Some(self.read_ident()?),
                 Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
                     block.push(self.read_call(prev.clone().ok_or_else(|| {
-                        Error::new("Expected ident before LeftParen/Str/LeftCurlyBracket for call, found nothing".to_string())
+                        Error::new(
+                            "Expected ident before LeftParen/Str/LeftCurlyBracket for call, found nothing"
+                            .to_string()
+                        )
                     })?)?)
                 }
                 Token::Equal => {
@@ -316,7 +319,19 @@ impl<'a> AstConstructor<'a> {
 
         match t {
             Token::Function => self.read_func(),
-            Token::Ident(_) => self.read_ident(),
+            Token::Ident(_) => {
+                let ident = self.read_ident();
+
+                match self.reader.peek(0) {
+                    Some(t) => match t {
+                        Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
+                            self.read_call(ident?)
+                        }
+                        _ => ident,
+                    },
+                    None => ident,
+                }
+            }
             Token::Str(_) => self.read_str(),
             Token::Int(_) => self.read_int(),
             Token::Float(_) => self.read_float(),
