@@ -103,3 +103,40 @@ fn func_call_vararg_args() {
         )]),
     )
 }
+
+#[test]
+fn func_call_str_shorthand() {
+    assert_eq!(
+        parse("test\"hello\"").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Ident("test".to_string())),
+            vec![AstNode::Str("hello".to_string()),],
+        )]),
+    )
+}
+
+#[test]
+fn func_call_str_multiline_shorthand() {
+    assert_eq!(
+        parse("test[[hello]]").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Ident("test".to_string())),
+            vec![AstNode::Str("hello".to_string()),],
+        )]),
+    )
+}
+
+#[test]
+fn func_call_table_shorthand() {
+    assert_eq!(
+        parse("test{a, b, c}").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Ident("test".to_string())),
+            vec![AstNode::Table(vec![
+                AstNode::Ident("a".to_string()),
+                AstNode::Ident("b".to_string()),
+                AstNode::Ident("c".to_string()),
+            ])],
+        )]),
+    )
+}

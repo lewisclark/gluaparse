@@ -743,7 +743,7 @@ pub enum AstNode {
     /* key, val */
     KeyValue(Box<AstNode>, Box<AstNode>),
 
-    /* key values */
+    /* keyvalues or values */
     Table(Vec<AstNode>),
 
     Vararg,
