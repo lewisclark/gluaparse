@@ -1,12 +1,10 @@
-use gluaparse;
 use gluaparse::ast::AstNode;
+use gluaparse::parse;
 
 #[test]
-fn named_func() {
-    let ast = gluaparse::parse("function test() end").unwrap();
-
+fn func_named() {
     assert_eq!(
-        ast,
+        parse("function test() end").unwrap(),
         AstNode::Block(vec![AstNode::Assignment(
             Box::new(AstNode::Ident("test".to_string())),
             Box::new(AstNode::Function(
@@ -18,11 +16,9 @@ fn named_func() {
 }
 
 #[test]
-fn anon_func() {
-    let ast = gluaparse::parse("local test = function() end").unwrap();
-
+fn func_anon() {
     assert_eq!(
-        ast,
+        parse("local test = function() end").unwrap(),
         AstNode::Block(vec![AstNode::Declaration(
             Box::new(AstNode::Ident("test".to_string())),
             Box::new(AstNode::Function(
@@ -34,11 +30,9 @@ fn anon_func() {
 }
 
 #[test]
-fn vararg_func() {
-    let ast = gluaparse::parse("local function test(...) end").unwrap();
-
+fn func_vararg() {
     assert_eq!(
-        ast,
+        parse("local function test(...) end").unwrap(),
         AstNode::Block(vec![AstNode::Declaration(
             Box::new(AstNode::Ident("test".to_string())),
             Box::new(AstNode::Function(
@@ -50,11 +44,9 @@ fn vararg_func() {
 }
 
 #[test]
-fn arg_with_vararg_func() {
-    let ast = gluaparse::parse("local function test(a, b, ...) end").unwrap();
-
+fn func_vararg_with_arg() {
     assert_eq!(
-        ast,
+        parse("local function test(a, b, ...) end").unwrap(),
         AstNode::Block(vec![AstNode::Declaration(
             Box::new(AstNode::Ident("test".to_string())),
             Box::new(AstNode::Function(
@@ -70,16 +62,14 @@ fn arg_with_vararg_func() {
 }
 
 #[test]
-fn arg_after_vararg() {
+fn func_arg_after_vararg() {
     assert!(gluaparse::parse("local function test(a, b, ..., c) end").is_err());
 }
 
 #[test]
-fn self_func() {
-    let ast = gluaparse::parse("function tab:test() end").unwrap();
-
+fn func_self() {
     assert_eq!(
-        ast,
+        parse("function tab:test() end").unwrap(),
         AstNode::Block(vec![AstNode::Assignment(
             Box::new(AstNode::Index(
                 Box::new(AstNode::Ident("tab".to_string())),
