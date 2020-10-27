@@ -50,6 +50,31 @@ fn vararg_func() {
 }
 
 #[test]
+fn arg_with_vararg_func() {
+    let ast = gluaparse::parse("local function test(a, b, ...) end").unwrap();
+
+    assert_eq!(
+        ast,
+        AstNode::Block(vec![AstNode::Declaration(
+            Box::new(AstNode::Ident("test".to_string())),
+            Box::new(AstNode::Function(
+                vec![
+                    AstNode::Ident("a".to_string()),
+                    AstNode::Ident("b".to_string()),
+                    AstNode::Vararg,
+                ],
+                Box::new(AstNode::Block(Vec::new()))
+            )),
+        )])
+    );
+}
+
+#[test]
+fn arg_after_vararg() {
+    assert!(gluaparse::parse("local function test(a, b, ..., c) end").is_err());
+}
+
+#[test]
 fn self_func() {
     let ast = gluaparse::parse("function tab:test() end").unwrap();
 
