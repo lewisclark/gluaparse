@@ -103,7 +103,7 @@ impl<'a> AstConstructor<'a> {
             let func = Box::new(AstNode::Function(params, body));
 
             Ok(match is_local {
-                true => AstNode::Declaration(ident, Some(func)),
+                true => AstNode::Declaration(ident, func),
                 false => AstNode::Assignment(ident, func),
             })
         }
@@ -182,7 +182,11 @@ impl<'a> AstConstructor<'a> {
                     self.reader.consume(1);
                     block.push(self.read_block()?);
                 }
-                Token::Local => self.reader.consume(1),
+                Token::Local => {
+                    for node in self.read_declaration()? {
+                        block.push(node);
+                    }
+                },
                 Token::Function => block.push(self.read_func()?),
                 Token::Ident(_) => prev = Some(self.read_ident()?),
                 Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
@@ -206,6 +210,48 @@ impl<'a> AstConstructor<'a> {
         }
 
         Ok(AstNode::Block(block))
+    }
+
+    fn read_declaration(&mut self) -> VecAstResult {
+        expect!(self.reader.next(), "Local", Token::Local)?;
+
+        let mut idents = Vec::new();
+        loop {
+            idents.push(self.read_ident()?);
+
+            if matches!(self.reader.peek(0), Some(Token::Comma)) {
+                self.reader.consume(1);
+            } else {
+                break;
+            }
+        }
+
+        let mut values = Vec::new();
+        if matches!(self.reader.peek(0), Some(Token::Equal)) {
+            self.reader.consume(1);
+
+            loop {
+                values.push(self.read_expression()?);
+
+                if matches!(self.reader.peek(0), Some(Token::Comma)) {
+                    self.reader.consume(1);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        let mut declarations = Vec::new();
+        for (i, ident) in idents.iter().enumerate() {
+            let dec = match values.get(i) {
+                Some(v) => AstNode::Declaration(Box::new(ident.clone()), Box::new(v.clone())),
+                None => AstNode::Declaration(Box::new(ident.clone()), Box::new(AstNode::Nil)),
+            };
+
+            declarations.push(dec);
+        }
+
+        Ok(declarations)
     }
 
     fn read_assignment(&mut self, ident: AstNode) -> AstResult {
@@ -614,7 +660,7 @@ pub enum AstNode {
 
     /* ident, value */
     /* A Declaration is a local variable declaration */
-    Declaration(Box<AstNode>, Option<Box<AstNode>>),
+    Declaration(Box<AstNode>, Box<AstNode>),
 
     /* ident, value */
     Assignment(Box<AstNode>, Box<AstNode>),
@@ -769,10 +815,7 @@ impl ptree::item::TreeItem for AstNode {
 
                 v
             }
-            AstNode::Declaration(ident, value) => match value {
-                Some(v) => vec![*ident.clone(), *v.clone()],
-                None => vec![*ident.clone()],
-            },
+            AstNode::Declaration(ident, value) => vec![*ident.clone(), *value.clone()],
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
             AstNode::Return(expr) => match expr {
                 Some(expr) => vec![*expr.clone()],
