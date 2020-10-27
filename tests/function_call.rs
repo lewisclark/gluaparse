@@ -140,3 +140,20 @@ fn func_call_table_shorthand() {
         )]),
     )
 }
+
+#[test]
+fn func_call_self_table_shorthand() {
+    assert_eq!(
+        parse("t:test{a}").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Index(
+                Box::new(AstNode::Ident("t".to_string())),
+                Box::new(AstNode::Ident("test".to_string())),
+            )),
+            vec![
+                AstNode::Ident("self".to_string()),
+                AstNode::Table(vec![AstNode::Ident("a".to_string()),])
+            ],
+        )]),
+    )
+}
