@@ -157,3 +157,45 @@ fn func_call_self_table_shorthand() {
         )]),
     )
 }
+
+#[test]
+fn func_call_store_ret_local() {
+    assert_eq!(
+        parse("local ret = func()").unwrap(),
+        AstNode::Block(vec![AstNode::Declaration(
+            Box::new(AstNode::Ident("ret".to_string())),
+            Box::new(AstNode::Call(
+                Box::new(AstNode::Ident("func".to_string())),
+                Vec::new(),
+            )),
+        )]),
+    )
+}
+
+#[test]
+fn func_call_store_ret() {
+    assert_eq!(
+        parse("ret = func()").unwrap(),
+        AstNode::Block(vec![AstNode::Assignment(
+            Box::new(AstNode::Ident("ret".to_string())),
+            Box::new(AstNode::Call(
+                Box::new(AstNode::Ident("func".to_string())),
+                Vec::new(),
+            )),
+        )]),
+    )
+}
+
+#[test]
+fn func_call_stacked() {
+    assert_eq!(
+        parse("test()()").unwrap(),
+        AstNode::Block(vec![AstNode::Call(
+            Box::new(AstNode::Call(
+                Box::new(AstNode::Ident("test".to_string())),
+                Vec::new(),
+            )),
+            Vec::new(),
+        )]),
+    )
+}
