@@ -351,7 +351,9 @@ impl<'a> Lexer<'a> {
                 }
             };
 
-            self.tokens.push(token);
+            if !matches!(token, Token::Comment(_)) {
+                self.tokens.push(token);
+            }
         }
 
         Ok(self)
