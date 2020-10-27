@@ -69,7 +69,7 @@ impl<'a> Reader<'a> {
     }
 
     pub fn read_until_nonalphanumeric(&mut self, shift: isize) -> &'a str {
-        self.read_until(shift, |c, _| !c.is_alphanumeric())
+        self.read_until(shift, |c, _| !c.is_alphanumeric() && c != '_')
     }
 }
 
