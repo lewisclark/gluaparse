@@ -183,8 +183,14 @@ impl<'a> AstConstructor<'a> {
                     block.push(self.read_block()?);
                 }
                 Token::Local => {
-                    for node in self.read_declaration()? {
-                        block.push(node);
+                    // If the next peek after local is a Function token, just consume the Local token
+                    // So that we can let the read_func() branch handle it below
+                    if matches!(self.reader.peek(1), Some(Token::Function)) {
+                        self.reader.consume(1);
+                    } else {
+                        for node in self.read_declaration()? {
+                            block.push(node);
+                        }
                     }
                 },
                 Token::Function => block.push(self.read_func()?),
