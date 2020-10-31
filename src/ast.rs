@@ -173,51 +173,73 @@ impl<'a> AstConstructor<'a> {
 
     fn read_block(&mut self) -> AstResult {
         let mut block = Vec::new();
-        let mut prev = None;
 
         while let Some(token) = self.reader.peek(0) {
             match token {
-                Token::Do => {
-                    self.reader.consume(1);
-                    block.push(self.read_block()?);
-                }
-                Token::Local => {
-                    // If the next peek after local is a Function token, just consume the Local token
-                    // So that we can let the read_func() branch handle it below
-                    if matches!(self.reader.peek(1), Some(Token::Function)) {
-                        self.reader.consume(1);
-                    } else {
-                        for node in self.read_declaration()? {
-                            block.push(node);
-                        }
-                    }
-                },
-                Token::Function => block.push(self.read_func()?),
-                Token::Ident(_) => prev = Some(self.read_ident()?),
-                Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
-                    block.push(self.read_call(prev.clone().ok_or_else(|| {
-                        Error::new(
-                            "Expected ident before LeftParen/Str/LeftCurlyBracket for call, found nothing"
-                            .to_string()
-                        )
-                    })?)?)
-                }
-                Token::Equal => {
-                    block.push(self.read_assignment(prev.clone().ok_or_else(|| {
-                        Error::new("Expected ident before Equal, found nothing".to_string())
-                    })?)?)
-                }
-                Token::Return => block.push(self.read_return()?),
-                Token::If => block.push(self.read_if()?),
                 Token::End | Token::Else | Token::ElseIf => {
                     self.reader.consume(1);
                     break;
                 }
-                t => unimplemented!("{:?}", t),
+                _ => {
+                    for stat in self.read_stat()? {
+                        block.push(stat);
+                    }
+
+                    if self.reader.peek(0) == Some(&Token::Semicolon) {
+                        self.reader.consume(1);
+                    }
+                }
             };
         }
 
         Ok(AstNode::Block(block))
+    }
+
+    fn read_stat(&mut self) -> VecAstResult {
+        let mut stats = Vec::new();
+
+        match self.reader.peek(0) {
+            Some(t) => match t {
+                Token::Do => {
+                    self.reader.consume(1);
+                    stats.push(self.read_block()?);
+                }
+                Token::Local => {
+                    // If the next peek after local is a Function token, just consume the Local token
+                    // So that we can let the read_func() handle it
+                    if matches!(self.reader.peek(1), Some(Token::Function)) {
+                        self.reader.consume(1);
+                    } else {
+                        for node in self.read_declaration()? {
+                            stats.push(node);
+                        }
+                    }
+                }
+                Token::Function => stats.push(self.read_func()?),
+                Token::Ident(_) => {
+                    let ident = self.read_ident()?;
+
+                    match self.reader.peek(0) {
+                        Some(t) => match t {
+                            Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
+                                stats.push(self.read_call(ident)?);
+                            }
+                            Token::Equal => {
+                                stats.push(self.read_assignment(ident)?);
+                            }
+                            _ => panic!(),
+                        },
+                        None => panic!(),
+                    }
+                }
+                Token::Return => stats.push(self.read_return()?),
+                Token::If => stats.push(self.read_if()?),
+                t => unimplemented!("{:?}", t),
+            },
+            None => panic!(),
+        }
+
+        Ok(stats)
     }
 
     fn read_declaration(&mut self) -> VecAstResult {
