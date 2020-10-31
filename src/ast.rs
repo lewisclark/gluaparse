@@ -369,7 +369,10 @@ impl<'a> AstConstructor<'a> {
                     None => self.read_value()?,
                 };
 
-                if self.reader.peek(0) == Some(&Token::Comma) {
+                if matches!(
+                    self.reader.peek(0),
+                    Some(&Token::Comma) | Some(&Token::Semicolon)
+                ) {
                     self.reader.consume(1);
                 }
 
