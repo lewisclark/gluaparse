@@ -98,8 +98,8 @@ impl<'a> Lexer<'a> {
             self.reader.advance(1);
             let num = self.reader.read_until(0, |c, _| !c.is_digit(16));
 
-            Ok(Token::Int(
-                isize::from_str_radix(num, 16).map_err(Error::from_err)?,
+            Ok(Token::Number(
+                isize::from_str_radix(num, 16).map_err(Error::from_err)? as f64,
             ))
         } else {
             let num = self.reader.read_until(-1, |c, _| {
@@ -111,10 +111,10 @@ impl<'a> Lexer<'a> {
                 .find(|c| c == 'e' || c == '.')
                 .is_some()
             {
-                Ok(Token::Float(f64::from_str(num).map_err(Error::from_err)?))
+                Ok(Token::Number(f64::from_str(num).map_err(Error::from_err)?))
             } else {
-                Ok(Token::Int(
-                    isize::from_str_radix(num, 10).map_err(Error::from_err)?,
+                Ok(Token::Number(
+                    isize::from_str_radix(num, 10).map_err(Error::from_err)? as f64,
                 ))
             }
         }
@@ -426,8 +426,7 @@ pub enum Token<'a> {
 
     Ident(&'a str),
     Str(&'a str),
-    Int(isize),
-    Float(f64),
+    Number(f64),
     Comment(&'a str),
 }
 

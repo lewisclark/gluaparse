@@ -3,9 +3,6 @@ use crate::lexer::Token;
 use std::convert::From;
 use std::fmt::{self, Display};
 
-type AstResult = Result<AstNode, Error>;
-type VecAstResult = Result<Vec<AstNode>, Error>;
-
 macro_rules! expect {
     ( $found:expr, $expected_str:expr, $( $expected:pat ),+ ) => {
         match $found {
@@ -59,635 +56,283 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    pub fn create(mut self) -> AstResult {
-        self.read_chunk()
-    }
-
-    fn read_func(&mut self) -> AstResult {
-        expect!(self.reader.next(), "Function", Token::Function)?;
-
-        let is_local = match self.reader.peek(-2) {
-            Some(t) => t == &Token::Local,
-            None => false,
-        };
-
-        expect!(
-            self.reader.peek(0),
-            "LeftParen or Ident",
-            Token::LeftParen,
-            Token::Ident(_)
-        )?;
-        let is_anonymous = self.reader.peek(0).unwrap() == &Token::LeftParen;
-
-        if is_anonymous {
-            let params = self.read_params()?;
-            let body = Box::new(self.read_block()?);
-
-            Ok(AstNode::Function(params, body))
-        } else {
-            let ident = Box::new(self.read_ident()?);
-
-            let has_colon_op = match self.reader.peek(-2) {
-                Some(t) => matches!(t, Token::Colon),
-                None => false,
-            };
-
-            let mut params = self.read_params()?;
-
-            if has_colon_op {
-                params.insert(0, AstNode::Ident("self".to_string()));
-            }
-
-            let body = Box::new(self.read_block()?);
-
-            let func = Box::new(AstNode::Function(params, body));
-
-            Ok(match is_local {
-                true => AstNode::Declaration(ident, func),
-                false => AstNode::Assignment(ident, func),
-            })
-        }
-    }
-
-    fn read_params(&mut self) -> VecAstResult {
-        expect!(self.reader.next(), "LeftParen", Token::LeftParen)?;
-        let params = self.read_comma_delimited(AstConstructor::read_ident)?;
-        expect!(self.reader.next(), "RightParen", Token::RightParen)?;
-
-        Ok(params)
-    }
-
-    fn read_arguments(&mut self) -> VecAstResult {
-        let t = expect!(
-            self.reader.peek(0),
-            "LeftParen/Str/LeftCurlyBracket",
-            Token::LeftParen,
-            Token::Str(_),
-            Token::LeftCurlyBracket
-        )?;
-
-        Ok(match t {
-            Token::LeftParen => {
-                self.reader.consume(1);
-                let args = self.read_comma_delimited(AstConstructor::read_expression)?;
-                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
-
-                args
-            }
-            Token::Str(_) => vec![self.read_str()?],
-            Token::LeftCurlyBracket => vec![self.read_table()?],
-            _ => panic!(),
-        })
-    }
-
-    fn read_comma_delimited<F>(&mut self, reader: F) -> VecAstResult
-    where
-        F: Fn(&mut Self) -> AstResult,
-    {
-        let mut exprs = Vec::new();
-
-        while let Some(t) = self.reader.peek(0) {
-            match t {
-                Token::Comma => self.reader.consume(1),
-                Token::DotDotDot => {
-                    self.reader.consume(1);
-                    exprs.push(AstNode::Vararg);
-
-                    if matches!(self.reader.peek(0), Some(Token::Comma)) {
-                        return Err(Error::new(
-                            "Vararg (...) must be the final parameter".to_string(),
-                        ));
-                    }
-                }
-                Token::RightParen | Token::RightSquareBracket | Token::RightCurlyBracket => break,
-                _ => exprs.push(reader(self)?),
-            }
-        }
-
-        Ok(exprs)
-    }
-
-    fn read_chunk(&mut self) -> AstResult {
-        self.read_block()
-    }
-
-    fn read_block(&mut self) -> AstResult {
-        let mut block = Vec::new();
-
-        while let Some(token) = self.reader.peek(0) {
-            match token {
-                Token::End | Token::Else | Token::ElseIf => {
-                    self.reader.consume(1);
-                    break;
-                }
-                _ => {
-                    for stat in self.read_stat()? {
-                        block.push(stat);
-                    }
-
-                    if self.reader.peek(0) == Some(&Token::Semicolon) {
-                        self.reader.consume(1);
-                    }
-                }
-            };
-        }
-
-        Ok(AstNode::Block(block))
-    }
-
-    fn read_stat(&mut self) -> VecAstResult {
+    pub fn create(mut self) -> Result<AstNode, Error> {
         let mut stats = Vec::new();
 
+        while let Some(mut stat) = self.read_stat()? {
+            if self.reader.peek(0) == Some(&Token::Semicolon) {
+                self.reader.consume(1);
+            }
+
+            stats.append(&mut stat);
+
+            break;
+        }
+
+        if let Some(last_stat) = self.read_laststat() {
+            if self.reader.peek(0) == Some(&Token::Semicolon) {
+                self.reader.consume(1);
+            }
+
+            stats.push(last_stat);
+        }
+
+        Ok(AstNode::Block(stats))
+    }
+
+    fn read_stat(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
+        if let Some(varlist) = self.read_varlist_assignment()? {
+            Ok(Some(varlist))
+        //} else if let Some(_call) = self.read_call() {
+        //} else if let Some(_block) = self.read_do_block() {
+        //} else if let Some(_loop) = self.read_loop() {
+        //} else if let Some(_if) = self.read_if() {
+        //} else if let Some(_func) = self.read_func() {
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_laststat(&mut self) -> Option<AstNode> {
+        None
+    }
+
+    fn read_varlist_assignment(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
+        let varlist = self.read_varlist()?;
+
+        if varlist.is_empty() || !matches!(self.reader.peek(0), Some(&Token::Equal)) {
+            return Ok(None);
+        }
+
+        self.reader.consume(1);
+
+        let explist = self.read_explist()?;
+        let mut assignments = Vec::new();
+
+        for (i, var) in varlist.iter().enumerate() {
+            let val = explist.get(i).or(Some(&AstNode::Nil)).unwrap();
+
+            assignments.push(AstNode::Assignment(
+                Box::new(var.clone()),
+                Box::new(val.clone()),
+            ));
+        }
+
+        Ok(Some(assignments))
+    }
+
+    fn read_varlist(&mut self) -> Result<Vec<AstNode>, Error> {
+        let mut vars = Vec::new();
+
+        while let Some(var) = self.read_var()? {
+            vars.push(var);
+
+            if matches!(self.reader.peek(0), Some(&Token::Comma)) {
+                self.reader.consume(1);
+            } else {
+                break;
+            }
+        }
+
+        Ok(vars)
+    }
+
+    fn read_var(&mut self) -> Result<Option<AstNode>, Error> {
+        if let Some(name) = self.read_name() {
+            Ok(Some(name))
+        } else if let Some(prefix_exp) = self.read_prefix_exp()? {
+            match self.reader.peek(0) {
+                Some(t) => match t {
+                    Token::LeftSquareBracket => {
+                        self.reader.consume(1);
+                        let exp = self.read_exp()?.unwrap();
+
+                        expect!(self.reader.next(), "]", Token::RightSquareBracket)?;
+
+                        Ok(Some(AstNode::Index(Box::new(prefix_exp), Box::new(exp))))
+                    }
+                    Token::Dot => {
+                        self.reader.consume(1);
+                        let name = self.read_name().unwrap();
+
+                        Ok(Some(AstNode::Index(Box::new(prefix_exp), Box::new(name))))
+                    }
+                    _ => Ok(None),
+                },
+                None => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_name(&mut self) -> Option<AstNode> {
         match self.reader.peek(0) {
             Some(t) => match t {
-                Token::Do => {
+                Token::Ident(s) => {
+                    let s = s.to_string();
                     self.reader.consume(1);
-                    stats.push(self.read_block()?);
+                    Some(AstNode::Ident(s))
                 }
-                Token::Local => {
-                    // If the next peek after local is a Function token, just consume the Local token
-                    // So that we can let the read_func() handle it
-                    if matches!(self.reader.peek(1), Some(Token::Function)) {
-                        self.reader.consume(1);
-                    } else {
-                        for node in self.read_declaration()? {
-                            stats.push(node);
-                        }
-                    }
-                }
-                Token::Function => stats.push(self.read_func()?),
-                Token::Ident(_) => {
-                    let ident = self.read_ident()?;
-
-                    match self.reader.peek(0) {
-                        Some(t) => match t {
-                            Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
-                                stats.push(self.read_call(ident)?);
-                            }
-                            Token::Equal => {
-                                stats.push(self.read_assignment(ident)?);
-                            }
-                            _ => panic!(),
-                        },
-                        None => panic!(),
-                    }
-                }
-                Token::Return => stats.push(self.read_return()?),
-                Token::If => stats.push(self.read_if()?),
-                t => unimplemented!("{:?}", t),
+                _ => None,
             },
-            None => panic!(),
+            None => None,
         }
-
-        Ok(stats)
     }
 
-    fn read_declaration(&mut self) -> VecAstResult {
-        expect!(self.reader.next(), "Local", Token::Local)?;
+    fn read_prefix_exp(&mut self) -> Result<Option<AstNode>, Error> {
+        if let Some(var) = self.read_var()? {
+            Ok(Some(var))
+        } else if let Some(call) = self.read_call() {
+            Ok(Some(call))
+        } else {
+            expect!(self.reader.next(), "(", Token::LeftParen)?;
+            let exp = self.read_exp()?;
+            expect!(self.reader.next(), ")", Token::RightParen)?;
 
-        let mut idents = Vec::new();
-        loop {
-            idents.push(self.read_ident()?);
+            Ok(exp)
+        }
+    }
 
-            if matches!(self.reader.peek(0), Some(Token::Comma)) {
+    fn read_exp(&mut self) -> Result<Option<AstNode>, Error> {
+        if let Some(nil) = self.read_nil() {
+            Ok(Some(nil))
+        } else if let Some(b) = self.read_bool() {
+            Ok(Some(b))
+        } else if let Some(n) = self.read_number() {
+            Ok(Some(n))
+        } else if let Some(s) = self.read_string() {
+            Ok(Some(s))
+        } else if let Some(vararg) = self.read_vararg() {
+            Ok(Some(vararg))
+        } else if let Some(func) = self.read_func() {
+            Ok(Some(func))
+        } else if let Some(prefix_exp) = self.read_prefix_exp()? {
+            Ok(Some(prefix_exp))
+        } else if let Some(table) = self.read_table_constructor() {
+            Ok(Some(table))
+        } else if let Some(binop) = self.read_binop() {
+            Ok(Some(binop))
+        } else if let Some(unaryop) = self.read_unaryop() {
+            Ok(Some(unaryop))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_explist(&mut self) -> Result<Vec<AstNode>, Error> {
+        let mut exps = Vec::new();
+
+        while let Some(exp) = self.read_exp()? {
+            exps.push(exp);
+
+            if matches!(self.reader.peek(0), Some(&Token::Comma)) {
                 self.reader.consume(1);
             } else {
                 break;
             }
         }
 
-        let mut values = Vec::new();
-        if matches!(self.reader.peek(0), Some(Token::Equal)) {
+        Ok(exps)
+    }
+
+    fn read_call(&mut self) -> Option<AstNode> {
+        None
+    }
+
+    fn read_do_block(&mut self) -> Option<AstNode> {
+        None
+    }
+
+    fn read_loop(&mut self) -> Option<AstNode> {
+        None
+    }
+
+    fn read_if(&mut self) -> Option<AstNode> {
+        None
+    }
+
+    fn read_func(&mut self) -> Option<AstNode> {
+        None
+    }
+
+    fn read_nil(&mut self) -> Option<AstNode> {
+        if matches!(self.reader.peek(0), Some(&Token::Nil)) {
             self.reader.consume(1);
 
-            loop {
-                values.push(self.read_expression()?);
+            Some(AstNode::Nil)
+        } else {
+            None
+        }
+    }
 
-                if matches!(self.reader.peek(0), Some(Token::Comma)) {
+    fn read_bool(&mut self) -> Option<AstNode> {
+        match self.reader.peek(0) {
+            Some(t) => match t {
+                Token::True => {
                     self.reader.consume(1);
-                } else {
-                    break;
+                    Some(AstNode::Bool(true))
                 }
-            }
-        }
-
-        let mut declarations = Vec::new();
-        for (i, ident) in idents.iter().enumerate() {
-            let dec = match values.get(i) {
-                Some(v) => AstNode::Declaration(Box::new(ident.clone()), Box::new(v.clone())),
-                None => AstNode::Declaration(Box::new(ident.clone()), Box::new(AstNode::Nil)),
-            };
-
-            declarations.push(dec);
-        }
-
-        Ok(declarations)
-    }
-
-    fn read_assignment(&mut self, ident: AstNode) -> AstResult {
-        expect!(self.reader.next(), "Equal", Token::Equal)?;
-        let expr = self.read_expression()?;
-
-        Ok(AstNode::Assignment(Box::new(ident), Box::new(expr)))
-    }
-
-    fn read_return(&mut self) -> AstResult {
-        expect!(self.reader.next(), "Return", Token::Return)?;
-
-        let expr = match self.reader.peek(0) {
-            Some(t) => {
-                if matches!(t, Token::End) {
-                    None
-                } else {
-                    Some(Box::new(self.read_expression()?))
-                }
-            }
-            None => panic!(),
-        };
-
-        Ok(AstNode::Return(expr))
-    }
-
-    fn read_call(&mut self, ident: AstNode) -> AstResult {
-        let has_colon_op = match self.reader.peek(-2) {
-            Some(t) => matches!(t, Token::Colon),
-            None => false,
-        };
-
-        let mut args = self.read_arguments()?;
-
-        if has_colon_op {
-            args.insert(0, AstNode::Ident("self".to_string()));
-        }
-
-        Ok(AstNode::Call(Box::new(ident), args))
-    }
-
-    fn read_value(&mut self) -> AstResult {
-        let t = expect!(
-            self.reader.peek(0),
-            "Value",
-            Token::Function,
-            Token::Ident(_),
-            Token::Str(_),
-            Token::Int(_),
-            Token::Float(_),
-            Token::True,
-            Token::False,
-            Token::Nil,
-            Token::LeftCurlyBracket,
-            Token::DotDotDot
-        )?;
-
-        match t {
-            Token::Function => self.read_func(),
-            Token::Ident(_) => {
-                let ident = self.read_ident();
-
-                match self.reader.peek(0) {
-                    Some(t) => match t {
-                        Token::LeftParen | Token::Str(_) | Token::LeftCurlyBracket => {
-                            self.read_call(ident?)
-                        }
-                        _ => ident,
-                    },
-                    None => ident,
-                }
-            }
-            Token::Str(_) => self.read_str(),
-            Token::Int(_) => self.read_int(),
-            Token::Float(_) => self.read_float(),
-            Token::True | Token::False => self.read_bool(),
-            Token::Nil => self.read_nil(),
-            Token::LeftCurlyBracket => self.read_table(),
-            Token::DotDotDot => {
-                self.reader.consume(1);
-                Ok(AstNode::Vararg)
-            }
-            _ => panic!(),
-        }
-    }
-
-    fn read_table(&mut self) -> AstResult {
-        expect!(
-            self.reader.next(),
-            "LeftCurlyBracket",
-            Token::LeftCurlyBracket
-        )?;
-
-        let mut kv = Vec::new();
-
-        while let Some(t) = self.reader.peek(0) {
-            if matches!(t, Token::RightCurlyBracket) {
-                break;
-            } else {
-                let node = match self.read_table_key()? {
-                    Some(key) => {
-                        expect!(self.reader.next(), "Equal", Token::Equal)?;
-                        let val = self.read_value()?;
-
-                        AstNode::KeyValue(Box::new(key), Box::new(val))
-                    }
-                    None => self.read_value()?,
-                };
-
-                if matches!(
-                    self.reader.peek(0),
-                    Some(&Token::Comma) | Some(&Token::Semicolon)
-                ) {
+                Token::False => {
                     self.reader.consume(1);
+                    Some(AstNode::Bool(false))
                 }
-
-                kv.push(node);
-            }
+                _ => None,
+            },
+            None => None,
         }
-
-        expect!(
-            self.reader.next(),
-            "RightCurlyBracket",
-            Token::RightCurlyBracket
-        )?;
-
-        Ok(AstNode::Table(kv))
     }
 
-    fn read_table_key(&mut self) -> Result<Option<AstNode>, Error> {
-        match self.reader.peek(0).unwrap() {
-            Token::LeftSquareBracket => {
-                expect!(
-                    self.reader.next(),
-                    "LeftSquareBracket",
-                    Token::LeftSquareBracket
-                )?;
-                let k = self.read_value()?;
-                expect!(
-                    self.reader.next(),
-                    "RightSquareBracket",
-                    Token::RightSquareBracket
-                )?;
+    fn read_number(&mut self) -> Option<AstNode> {
+        match self.reader.peek(0) {
+            Some(t) => match t {
+                Token::Number(n) => {
+                    let n = *n;
+                    self.reader.consume(1);
 
-                Ok(Some(k))
-            }
-            Token::Ident(_) => {
-                if matches!(self.reader.peek(1), Some(Token::Equal)) {
-                    Ok(Some(self.read_ident()?))
-                } else {
-                    Ok(None)
+                    Some(AstNode::Number(n))
                 }
-            }
-            _ => Ok(None),
+                _ => None,
+            },
+            None => None,
         }
     }
 
-    fn read_expression(&mut self) -> AstResult {
-        match self.reader.peek(0).unwrap() {
-            Token::Not | Token::Hashtag => self.read_unaryop(),
-            Token::LeftParen => {
-                self.reader.consume(1);
-                let expr = self.read_expression()?;
-                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+    fn read_string(&mut self) -> Option<AstNode> {
+        match self.reader.peek(0) {
+            Some(t) => match t {
+                Token::Str(s) => {
+                    let s = s.to_string();
+                    self.reader.consume(1);
 
-                Ok(expr)
-            }
-            _ => {
-                let left = self.read_value()?;
-
-                match self.reader.peek(0) {
-                    Some(t) => match t {
-                        Token::Plus
-                        | Token::Minus
-                        | Token::Asterisk
-                        | Token::Slash
-                        | Token::Caret
-                        | Token::Percent
-                        | Token::DotDot
-                        | Token::LeftAngleBracket
-                        | Token::LeftAngleBracketEqual
-                        | Token::RightAngleBracket
-                        | Token::RightAngleBracketEqual
-                        | Token::EqualEqual
-                        | Token::NotEqual
-                        | Token::And
-                        | Token::Or => self.read_binaryop(left),
-                        _ => Ok(left),
-                    },
-                    None => Ok(left),
+                    Some(AstNode::Str(s))
                 }
-            }
+                _ => None,
+            },
+            None => None,
         }
     }
 
-    fn read_binaryop(&mut self, left: AstNode) -> AstResult {
-        let t = expect!(
-            self.reader.next(),
-            "Binary Operator",
-            Token::Plus,
-            Token::Minus,
-            Token::Asterisk,
-            Token::Slash,
-            Token::Caret,
-            Token::Percent,
-            Token::DotDot,
-            Token::LeftAngleBracket,
-            Token::LeftAngleBracketEqual,
-            Token::RightAngleBracket,
-            Token::RightAngleBracketEqual,
-            Token::EqualEqual,
-            Token::NotEqual,
-            Token::And,
-            Token::Or
-        )?;
+    fn read_vararg(&mut self) -> Option<AstNode> {
+        if matches!(self.reader.peek(0), Some(&Token::DotDotDot)) {
+            self.reader.consume(1);
 
-        let left = Box::new(left);
-
-        match t {
-            Token::Plus => Ok(AstNode::Add(left, Box::new(self.read_expression()?))),
-            Token::Minus => Ok(AstNode::Subtract(left, Box::new(self.read_expression()?))),
-            Token::Asterisk => Ok(AstNode::Multiply(left, Box::new(self.read_expression()?))),
-            Token::Slash => Ok(AstNode::Divide(left, Box::new(self.read_expression()?))),
-            Token::Caret => Ok(AstNode::Exponentiate(
-                left,
-                Box::new(self.read_expression()?),
-            )),
-            Token::Percent => Ok(AstNode::Modulo(left, Box::new(self.read_expression()?))),
-            Token::DotDot => Ok(AstNode::Concat(left, Box::new(self.read_expression()?))),
-            Token::LeftAngleBracket => {
-                Ok(AstNode::LessThan(left, Box::new(self.read_expression()?)))
-            }
-            Token::LeftAngleBracketEqual => Ok(AstNode::LessThanOrEqual(
-                left,
-                Box::new(self.read_expression()?),
-            )),
-            Token::RightAngleBracket => Ok(AstNode::GreaterThan(
-                left,
-                Box::new(self.read_expression()?),
-            )),
-            Token::RightAngleBracketEqual => Ok(AstNode::GreaterThanOrEqual(
-                left,
-                Box::new(self.read_expression()?),
-            )),
-            Token::EqualEqual => Ok(AstNode::Equal(left, Box::new(self.read_expression()?))),
-            Token::NotEqual => Ok(AstNode::NotEqual(left, Box::new(self.read_expression()?))),
-            Token::And => Ok(AstNode::And(left, Box::new(self.read_expression()?))),
-            Token::Or => Ok(AstNode::Or(left, Box::new(self.read_expression()?))),
-            _ => panic!(),
+            Some(AstNode::Vararg)
+        } else {
+            None
         }
     }
 
-    fn read_unaryop(&mut self) -> AstResult {
-        let t = expect!(
-            self.reader.next(),
-            "Not/Hashtag",
-            Token::Not,
-            Token::Hashtag
-        )?;
-
-        Ok(match t {
-            Token::Not => AstNode::Not(Box::new(self.read_expression()?)),
-            Token::Hashtag => AstNode::Length(Box::new(self.read_expression()?)),
-            _ => panic!(),
-        })
+    fn read_table_constructor(&mut self) -> Option<AstNode> {
+        None
     }
 
-    fn read_bool(&mut self) -> AstResult {
-        let t = expect!(self.reader.next(), "Bool", Token::True, Token::False)?;
-
-        match t {
-            Token::True => Ok(AstNode::Bool(true)),
-            Token::False => Ok(AstNode::Bool(false)),
-            _ => panic!(),
-        }
+    fn read_binop(&mut self) -> Option<AstNode> {
+        None
     }
 
-    fn read_nil(&mut self) -> AstResult {
-        expect!(self.reader.next(), "Nil", Token::Nil)?;
-
-        Ok(AstNode::Nil)
-    }
-
-    fn read_ident(&mut self) -> AstResult {
-        let mut ident = None;
-        let mut dot_present = false;
-
-        loop {
-            let t = expect!(
-                self.reader.peek(0),
-                "Ident/Dot/LeftSquareBracket",
-                Token::Ident(_),
-                Token::Dot,
-                Token::LeftSquareBracket,
-                Token::Colon
-            );
-
-            match t {
-                Ok(t) => match t {
-                    Token::Ident(s) => {
-                        let s = s.to_string();
-
-                        self.reader.consume(1);
-
-                        if dot_present {
-                            dot_present = false;
-
-                            ident = Some(AstNode::Index(
-                                Box::new(ident.unwrap()),
-                                Box::new(AstNode::Ident(s)),
-                            ));
-                        } else {
-                            ident = Some(AstNode::Ident(s));
-                        }
-                    }
-                    Token::Dot | Token::Colon => {
-                        self.reader.consume(1);
-                        dot_present = true;
-                    }
-                    Token::LeftSquareBracket => {
-                        ident = Some(AstNode::Index(
-                            Box::new(ident.unwrap()),
-                            Box::new(self.read_table_key()?.unwrap()),
-                        ));
-                    }
-                    _ => panic!(),
-                },
-                Err(_) => break,
-            }
-        }
-
-        Ok(ident.unwrap())
-    }
-
-    fn read_str(&mut self) -> AstResult {
-        let s = match expect!(self.reader.next(), "Str", Token::Str(_))? {
-            Token::Str(s) => s,
-            _ => panic!(),
-        };
-
-        Ok(AstNode::Str(s.to_string()))
-    }
-
-    fn read_int(&mut self) -> AstResult {
-        let n = match expect!(self.reader.next(), "Int", Token::Int(_))? {
-            Token::Int(n) => n,
-            _ => panic!(),
-        };
-
-        Ok(AstNode::Int(*n))
-    }
-
-    fn read_float(&mut self) -> AstResult {
-        let f = match expect!(self.reader.next(), "Float", Token::Float(_))? {
-            Token::Float(f) => f,
-            _ => panic!(),
-        };
-
-        Ok(AstNode::Float(*f))
-    }
-
-    fn read_if(&mut self) -> AstResult {
-        expect!(self.reader.next(), "If", Token::If)?;
-        let if_expr = self.read_expression()?;
-        expect!(self.reader.next(), "Then", Token::Then)?;
-        let if_block = self.read_block()?;
-        let if_stub = AstNode::IfStub(Some(Box::new(if_expr)), Box::new(if_block));
-
-        match expect!(
-            self.reader.peek(-1),
-            "End, Else or ElseIf",
-            Token::End,
-            Token::Else,
-            Token::ElseIf
-        )? {
-            Token::End => Ok(AstNode::If(vec![if_stub])),
-            Token::Else => {
-                let else_block = self.read_block()?;
-                let else_stub = AstNode::IfStub(None, Box::new(else_block));
-
-                Ok(AstNode::If(vec![if_stub, else_stub]))
-            }
-            Token::ElseIf => {
-                let mut stubs = vec![if_stub];
-
-                loop {
-                    match self.reader.peek(-1).unwrap() {
-                        Token::ElseIf => {
-                            let expr = self.read_expression()?;
-                            expect!(self.reader.next(), "Then", Token::Then)?;
-                            let block = self.read_block()?;
-
-                            stubs.push(AstNode::IfStub(Some(Box::new(expr)), Box::new(block)));
-                        }
-                        Token::Else => {
-                            let block = self.read_block()?;
-
-                            stubs.push(AstNode::IfStub(None, Box::new(block)));
-                        }
-                        Token::End => break Ok(AstNode::If(stubs)),
-                        _ => panic!(),
-                    }
-                }
-            }
-            _ => panic!(),
-        }
+    fn read_unaryop(&mut self) -> Option<AstNode> {
+        None
     }
 }
 
@@ -788,8 +433,7 @@ pub enum AstNode {
     Vararg,
 
     Str(String),
-    Int(isize),
-    Float(f64),
+    Number(f64),
     Bool(bool),
     Nil,
 }
@@ -843,8 +487,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
             AstNode::Str(s) => write!(f, "Str \"{}\"", s),
-            AstNode::Int(i) => write!(f, "Int {}", i),
-            AstNode::Float(fl) => write!(f, "Float {}", fl),
+            AstNode::Number(fl) => write!(f, "Number {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
             AstNode::Nil => write!(f, "Nil"),
         }
