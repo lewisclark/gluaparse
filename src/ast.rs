@@ -41,6 +41,14 @@ impl<'a> Reader<'a> {
     fn consume(&mut self, n: usize) {
         self.pos += n;
     }
+
+    fn pos(&self) -> usize {
+        self.pos
+    }
+
+    fn set_pos(&mut self, pos: usize) {
+        self.pos = pos
+    }
 }
 
 /* ---------- AstConstructor ---------- */
@@ -57,6 +65,12 @@ impl<'a> AstConstructor<'a> {
     }
 
     pub fn create(mut self) -> Result<AstNode, Error> {
+        Ok(self.read_chunk()?.unwrap())
+    }
+
+    pub fn read_chunk(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_chunk");
+
         let mut stats = Vec::new();
 
         while let Some(mut stat) = self.read_stat()? {
@@ -65,8 +79,6 @@ impl<'a> AstConstructor<'a> {
             }
 
             stats.append(&mut stat);
-
-            break;
         }
 
         if let Some(last_stat) = self.read_laststat() {
@@ -77,13 +89,16 @@ impl<'a> AstConstructor<'a> {
             stats.push(last_stat);
         }
 
-        Ok(AstNode::Block(stats))
+        Ok(Some(AstNode::Block(stats)))
     }
 
     fn read_stat(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
+        println!("read_stat");
+
         if let Some(varlist) = self.read_varlist_assignment()? {
             Ok(Some(varlist))
-        //} else if let Some(_call) = self.read_call() {
+        } else if let Some(call) = self.read_call()? {
+            Ok(Some(vec![call]))
         //} else if let Some(_block) = self.read_do_block() {
         //} else if let Some(_loop) = self.read_loop() {
         //} else if let Some(_if) = self.read_if() {
@@ -98,9 +113,14 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_varlist_assignment(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
+        println!("read_varlist_assignment");
+
+        let pos = self.reader.pos();
         let varlist = self.read_varlist()?;
 
         if varlist.is_empty() || !matches!(self.reader.peek(0), Some(&Token::Equal)) {
+            self.reader.set_pos(pos);
+
             return Ok(None);
         }
 
@@ -138,6 +158,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_var(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_var");
+
         if let Some(name) = self.read_name() {
             Ok(Some(name))
         } else if let Some(prefix_exp) = self.read_prefix_exp()? {
@@ -167,6 +189,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_name(&mut self) -> Option<AstNode> {
+        println!("read_name");
+
         match self.reader.peek(0) {
             Some(t) => match t {
                 Token::Ident(s) => {
@@ -181,20 +205,30 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_prefix_exp(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_prefix_exp");
+
+        if !matches!(self.reader.peek(0), Some(&Token::Ident(_)) | Some(&Token::LeftParen)) {
+            return Ok(None);
+        }
+
         if let Some(var) = self.read_var()? {
             Ok(Some(var))
-        } else if let Some(call) = self.read_call() {
+        } else if let Some(call) = self.read_call()? {
             Ok(Some(call))
-        } else {
-            expect!(self.reader.next(), "(", Token::LeftParen)?;
+        } else if matches!(self.reader.peek(0), Some(&Token::LeftParen)) {
+            self.reader.consume(1);
             let exp = self.read_exp()?;
             expect!(self.reader.next(), ")", Token::RightParen)?;
 
             Ok(exp)
+        } else {
+            Ok(None)
         }
     }
 
     fn read_exp(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_exp");
+
         if let Some(nil) = self.read_nil() {
             Ok(Some(nil))
         } else if let Some(b) = self.read_bool() {
@@ -221,6 +255,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_explist(&mut self) -> Result<Vec<AstNode>, Error> {
+        println!("read_explist");
+
         let mut exps = Vec::new();
 
         while let Some(exp) = self.read_exp()? {
@@ -236,8 +272,39 @@ impl<'a> AstConstructor<'a> {
         Ok(exps)
     }
 
-    fn read_call(&mut self) -> Option<AstNode> {
-        None
+    fn read_call(&mut self) -> Result<Option<AstNode>, Error> {
+        if let Some(prefix_exp) = self.read_prefix_exp()? {
+            if matches!(self.reader.peek(0), Some(&Token::Semicolon)) {
+                unimplemented!();
+            } else {
+                if let Some(args) = self.read_args()? {
+                    return Ok(Some(AstNode::Call(Box::new(prefix_exp), args)));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn read_args(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
+        match self.reader.peek(0) {
+            Some(Token::LeftParen) => {
+                self.reader.consume(1);
+                let explist = self.read_explist()?;
+                expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+
+                Ok(Some(explist))
+            }
+            _ => {
+                if let Some(table) = self.read_table_constructor() {
+                    Ok(Some(vec![table]))
+                } else if let Some(s) = self.read_string() {
+                    Ok(Some(vec![s]))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
     }
 
     fn read_do_block(&mut self) -> Option<AstNode> {
