@@ -261,7 +261,7 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(func))
         } else if let Some(prefix_exp) = self.read_prefix_exp()? {
             Ok(Some(prefix_exp))
-        } else if let Some(table) = self.read_table_constructor() {
+        } else if let Some(table) = self.read_table_constructor()? {
             Ok(Some(table))
         } else if let Some(binop) = self.read_binop() {
             Ok(Some(binop))
@@ -314,7 +314,7 @@ impl<'a> AstConstructor<'a> {
                 Ok(Some(explist))
             }
             _ => {
-                if let Some(table) = self.read_table_constructor() {
+                if let Some(table) = self.read_table_constructor()? {
                     Ok(Some(vec![table]))
                 } else if let Some(s) = self.read_string() {
                     Ok(Some(vec![s]))
@@ -502,6 +502,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_vararg(&mut self) -> Option<AstNode> {
+        println!("read_vararg {:?}", self.reader.peek(0));
+
         if matches!(self.reader.peek(0), Some(&Token::DotDotDot)) {
             self.reader.consume(1);
 
@@ -511,8 +513,81 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_table_constructor(&mut self) -> Option<AstNode> {
-        None
+    fn read_table_constructor(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_table_constructor {:?}", self.reader.peek(0));
+
+        if matches!(self.reader.peek(0), Some(&Token::LeftCurlyBracket)) {
+            self.reader.consume(1);
+
+            let table = AstNode::Table(self.read_fieldlist()?);
+
+            expect!(self.reader.next(), "}", Token::RightCurlyBracket)?;
+
+            Ok(Some(table))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_fieldlist(&mut self) -> Result<Vec<AstNode>, Error> {
+        println!("read_fieldlist {:?}", self.reader.peek(0));
+
+        let mut fieldlist = Vec::new();
+
+        while let Some(field) = self.read_field()? {
+            fieldlist.push(field);
+
+            if matches!(
+                self.reader.peek(0),
+                Some(Token::Comma) | Some(Token::Semicolon)
+            ) {
+                self.reader.consume(1);
+            } else {
+                break;
+            }
+        }
+
+        Ok(fieldlist)
+    }
+
+    fn read_field(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_field {:?}", self.reader.peek(0));
+
+        match self.reader.peek(0) {
+            Some(Token::LeftSquareBracket) => {
+                self.reader.consume(1);
+
+                let key = self
+                    .read_exp()?
+                    .ok_or_else(|| Error::new("Expected table key".to_string()))?;
+
+                expect!(self.reader.next(), "]", Token::RightSquareBracket)?;
+                expect!(self.reader.next(), "=", Token::Equal)?;
+
+                let val = self
+                    .read_exp()?
+                    .ok_or_else(|| Error::new("Expected table value".to_string()))?;
+
+                Ok(Some(AstNode::KeyValue(Box::new(key), Box::new(val))))
+            }
+            _ => {
+                if matches!(self.reader.peek(0), Some(&Token::Ident(_)))
+                    && matches!(self.reader.peek(1), Some(&Token::Equal))
+                {
+                    let key = self.read_name().unwrap();
+
+                    expect!(self.reader.next(), "=", Token::Equal)?;
+
+                    let val = self
+                        .read_exp()?
+                        .ok_or_else(|| Error::new("Expected table value".to_string()))?;
+
+                    Ok(Some(AstNode::KeyValue(Box::new(key), Box::new(val))))
+                } else {
+                    self.read_exp()
+                }
+            }
+        }
     }
 
     fn read_binop(&mut self) -> Option<AstNode> {
