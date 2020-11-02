@@ -101,10 +101,11 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(vec![call]))
         } else if let Some(do_block) = self.read_do_block()? {
             Ok(Some(vec![do_block]))
-        } else if let Some(loopy) = self.read_loop()? {
-            Ok(Some(vec![loopy]))
-        //} else if let Some(_if) = self.read_if() {
-        //} else if let Some(_func) = self.read_func() {
+        } else if let Some(loop_node) = self.read_loop()? {
+            Ok(Some(vec![loop_node]))
+        } else if let Some(if_node) = self.read_if()? {
+            Ok(Some(vec![if_node]))
+        //} else if let Some(_func) = self.read_func()? {
         } else {
             Ok(None)
         }
@@ -257,7 +258,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_exp(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_exp");
+        println!("read_exp {:?}", self.reader.peek(0));
 
         if let Some(nil) = self.read_nil() {
             Ok(Some(nil))
@@ -401,8 +402,60 @@ impl<'a> AstConstructor<'a> {
         Ok(None)
     }
 
-    fn read_if(&mut self) -> Option<AstNode> {
-        None
+    /* cond, block - if cond is None then it is an else */
+    // IfStub(Option<Box<AstNode>>, Box<AstNode>),
+    fn read_if(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_if {:?}", self.reader.peek(0));
+
+        if matches!(self.reader.peek(0), Some(Token::If)) {
+            let mut if_stubs = vec![self.read_if_stub()?];
+
+            while let Some(t) = self.reader.peek(0) {
+                if matches!(t, Token::ElseIf) {
+                    if_stubs.push(self.read_if_stub()?);
+                } else {
+                    break;
+                }
+            }
+
+            if matches!(self.reader.peek(0), Some(Token::Else)) {
+                if_stubs.push(self.read_if_stub()?);
+            }
+
+            expect!(self.reader.next(), "end", Token::End)?;
+
+            Ok(Some(AstNode::If(if_stubs)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_if_stub(&mut self) -> Result<AstNode, Error> {
+        println!("read_if_stub {:?}", self.reader.peek(0));
+
+        match self.reader.peek(0) {
+            Some(Token::If) | Some(Token::ElseIf) => {
+                self.reader.consume(1);
+
+                let cond = self.read_exp()?.ok_or_else(|| {
+                    Error::new("Expected expression for if/elseif condition".to_string())
+                })?;
+
+                expect!(self.reader.next(), "then", Token::Then)?;
+
+                let block = self.read_block()?;
+
+                Ok(AstNode::IfStub(Some(Box::new(cond)), Box::new(block)))
+            }
+            Some(Token::Else) => {
+                self.reader.consume(1);
+
+                Ok(AstNode::IfStub(None, Box::new(self.read_block()?)))
+            }
+            _ => Err(Error::new(
+                "Expected if/elseif/else for if stub".to_string(),
+            )),
+        }
     }
 
     fn read_func(&mut self) -> Result<Option<AstNode>, Error> {
