@@ -352,7 +352,21 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_loop_repeat(&mut self) -> Result<Option<AstNode>, Error> {
-        Ok(None)
+        if matches!(self.reader.peek(0), Some(&Token::Repeat)) {
+            self.reader.consume(1);
+
+            let block = self.read_block()?;
+
+            expect!(self.reader.next(), "Until", Token::Until)?;
+
+            let cond = self
+                .read_exp()?
+                .ok_or_else(|| Error::new("Expected expression after 'Until'".to_string()))?;
+
+            Ok(Some(AstNode::RepeatLoop(Box::new(block), Box::new(cond))))
+        } else {
+            Ok(None)
+        }
     }
 
     fn read_loop_for(&mut self) -> Result<Option<AstNode>, Error> {
@@ -538,6 +552,9 @@ pub enum AstNode {
     /* cond, block */
     WhileLoop(Box<AstNode>, Box<AstNode>),
 
+    /* block, cond */
+    RepeatLoop(Box<AstNode>, Box<AstNode>),
+
     /* key, val */
     KeyValue(Box<AstNode>, Box<AstNode>),
 
@@ -598,6 +615,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
             AstNode::If(_stubs) => write!(f, "If"),
             AstNode::WhileLoop(_cond, _block) => write!(f, "WhileLoop"),
+            AstNode::RepeatLoop(_block, _cond) => write!(f, "RepeatLoop"),
             AstNode::KeyValue(_key, _value) => write!(f, "KeyValue"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
@@ -651,6 +669,7 @@ impl ptree::item::TreeItem for AstNode {
             }
             AstNode::If(stubs) => stubs.to_vec(),
             AstNode::WhileLoop(cond, block) => vec![*cond.clone(), *block.clone()],
+            AstNode::RepeatLoop(block, cond) => vec![*block.clone(), *cond.clone()],
             AstNode::KeyValue(key, value) => vec![*key.clone(), *value.clone()],
             AstNode::Table(kv) => kv.clone(),
             _ => vec![],
