@@ -65,11 +65,11 @@ impl<'a> AstConstructor<'a> {
     }
 
     pub fn create(mut self) -> Result<AstNode, Error> {
-        Ok(self.read_chunk()?.unwrap())
+        Ok(self.read_block()?)
     }
 
-    pub fn read_chunk(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_chunk");
+    pub fn read_block(&mut self) -> Result<AstNode, Error> {
+        println!("read_block");
 
         let mut stats = Vec::new();
 
@@ -89,7 +89,7 @@ impl<'a> AstConstructor<'a> {
             stats.push(last_stat);
         }
 
-        Ok(Some(AstNode::Block(stats)))
+        Ok(AstNode::Block(stats))
     }
 
     fn read_stat(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
@@ -99,7 +99,8 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(varlist))
         } else if let Some(call) = self.read_call()? {
             Ok(Some(vec![call]))
-        //} else if let Some(_block) = self.read_do_block() {
+        } else if let Some(do_block) = self.read_do_block()? {
+            Ok(Some(vec![do_block]))
         //} else if let Some(_loop) = self.read_loop() {
         //} else if let Some(_if) = self.read_if() {
         //} else if let Some(_func) = self.read_func() {
@@ -307,8 +308,16 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_do_block(&mut self) -> Option<AstNode> {
-        None
+    fn read_do_block(&mut self) -> Result<Option<AstNode>, Error> {
+        if matches!(self.reader.peek(0), Some(&Token::Do)) {
+            self.reader.consume(1);
+            let block = self.read_block()?;
+            expect!(self.reader.next(), "End", Token::End)?;
+
+            Ok(Some(block))
+        } else {
+            Ok(None)
+        }
     }
 
     fn read_loop(&mut self) -> Option<AstNode> {
