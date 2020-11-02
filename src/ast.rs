@@ -265,7 +265,7 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(table))
         } else if let Some(binop) = self.read_binop() {
             Ok(Some(binop))
-        } else if let Some(unaryop) = self.read_unaryop() {
+        } else if let Some(unaryop) = self.read_unaryop()? {
             Ok(Some(unaryop))
         } else {
             Ok(None)
@@ -594,8 +594,44 @@ impl<'a> AstConstructor<'a> {
         None
     }
 
-    fn read_unaryop(&mut self) -> Option<AstNode> {
-        None
+    fn read_unaryop(&mut self) -> Result<Option<AstNode>, Error> {
+        if self.is_unaryop() {
+            let op = self.reader.next().unwrap();
+
+            Ok(Some(match op {
+                Token::Minus => AstNode::Negate(Box::new(if self.is_unaryop() {
+                    self.read_unaryop()?.unwrap()
+                } else {
+                    self.read_exp()?.ok_or_else(|| {
+                        Error::new("Expected expression after unary op '-'".to_string())
+                    })?
+                })),
+                Token::Not => AstNode::Not(Box::new(if self.is_unaryop() {
+                    self.read_unaryop()?.unwrap()
+                } else {
+                    self.read_exp()?.ok_or_else(|| {
+                        Error::new("Expected expression after unary op 'not'".to_string())
+                    })?
+                })),
+                Token::Hashtag => AstNode::Length(Box::new(if self.is_unaryop() {
+                    self.read_unaryop()?.unwrap()
+                } else {
+                    self.read_exp()?.ok_or_else(|| {
+                        Error::new("Expected expression after unary op '#'".to_string())
+                    })?
+                })),
+                _ => panic!(),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn is_unaryop(&self) -> bool {
+        matches!(
+            self.reader.peek(0),
+            Some(Token::Minus) | Some(Token::Not) | Some(Token::Hashtag)
+        )
     }
 }
 
@@ -668,6 +704,9 @@ pub enum AstNode {
 
     /* left expr, right expr */
     Or(Box<AstNode>, Box<AstNode>),
+
+    /* expr */
+    Negate(Box<AstNode>),
 
     /* expr */
     Not(Box<AstNode>),
@@ -747,6 +786,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(_left, _right) => write!(f, "NotEqual"),
             AstNode::And(_left, _right) => write!(f, "And"),
             AstNode::Or(_left, _right) => write!(f, "Or"),
+            AstNode::Negate(_expr) => write!(f, "Negate"),
             AstNode::Not(_expr) => write!(f, "Not"),
             AstNode::Length(_expr) => write!(f, "Length"),
             AstNode::Index(_t, _k) => write!(f, "Index"),
@@ -795,6 +835,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::NotEqual(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::And(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Or(left, right) => vec![*left.clone(), *right.clone()],
+            AstNode::Negate(expr) => vec![*expr.clone()],
             AstNode::Not(expr) => vec![*expr.clone()],
             AstNode::Length(expr) => vec![*expr.clone()],
             AstNode::Index(t, k) => vec![*t.clone(), *k.clone()],
