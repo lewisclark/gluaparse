@@ -191,7 +191,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_name(&mut self) -> Option<AstNode> {
-        println!("read_name");
+        println!("read_name {:?}", self.reader.peek(0));
 
         match self.reader.peek(0) {
             Some(t) => match t {
@@ -204,6 +204,22 @@ impl<'a> AstConstructor<'a> {
             },
             None => None,
         }
+    }
+
+    fn read_namelist(&mut self) -> Vec<AstNode> {
+        let mut namelist = Vec::new();
+
+        while let Some(name) = self.read_name() {
+            namelist.push(name);
+
+            if matches!(self.reader.peek(0), Some(&Token::Comma)) {
+                self.reader.consume(1);
+            } else {
+                break;
+            }
+        }
+
+        namelist
     }
 
     fn read_prefix_exp(&mut self) -> Result<Option<AstNode>, Error> {
@@ -241,7 +257,7 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(s))
         } else if let Some(vararg) = self.read_vararg() {
             Ok(Some(vararg))
-        } else if let Some(func) = self.read_func() {
+        } else if let Some(func) = self.read_func()? {
             Ok(Some(func))
         } else if let Some(prefix_exp) = self.read_prefix_exp()? {
             Ok(Some(prefix_exp))
@@ -377,8 +393,55 @@ impl<'a> AstConstructor<'a> {
         None
     }
 
-    fn read_func(&mut self) -> Option<AstNode> {
-        None
+    fn read_func(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_func {:?}", self.reader.peek(0));
+
+        if matches!(self.reader.peek(0), Some(&Token::Function)) {
+            self.reader.consume(1);
+
+            if let Some((parlist, body)) = self.read_funcbody()? {
+                Ok(Some(AstNode::Function(parlist, Box::new(body))))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_funcbody(&mut self) -> Result<Option<(Vec<AstNode>, AstNode)>, Error> {
+        println!("read_funcbody {:?}", self.reader.peek(0));
+
+        if matches!(self.reader.peek(0), Some(&Token::LeftParen)) {
+            self.reader.consume(1);
+            let parlist = self.read_parlist();
+            expect!(self.reader.next(), "RightParen", Token::RightParen)?;
+            let block = self.read_block()?;
+            expect!(self.reader.next(), "End", Token::End)?;
+
+            Ok(Some((parlist, block)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_parlist(&mut self) -> Vec<AstNode> {
+        println!("read_parlist {:?}", self.reader.peek(0));
+
+        if matches!(self.reader.peek(0), Some(&Token::DotDotDot)) {
+            self.reader.consume(1);
+
+            vec![AstNode::Vararg]
+        } else {
+            let mut namelist = self.read_namelist();
+
+            if matches!(self.reader.peek(0), Some(&Token::DotDotDot)) {
+                self.reader.consume(1);
+                namelist.push(AstNode::Vararg);
+            }
+
+            namelist
+        }
     }
 
     fn read_nil(&mut self) -> Option<AstNode> {
