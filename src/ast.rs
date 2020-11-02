@@ -101,7 +101,8 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(vec![call]))
         } else if let Some(do_block) = self.read_do_block()? {
             Ok(Some(vec![do_block]))
-        //} else if let Some(_loop) = self.read_loop() {
+        } else if let Some(loopy) = self.read_loop()? {
+            Ok(Some(vec![loopy]))
         //} else if let Some(_if) = self.read_if() {
         //} else if let Some(_func) = self.read_func() {
         } else {
@@ -320,8 +321,42 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_loop(&mut self) -> Option<AstNode> {
-        None
+    fn read_loop(&mut self) -> Result<Option<AstNode>, Error> {
+        if let Some(loop_while) = self.read_loop_while()? {
+            Ok(Some(loop_while))
+        } else if let Some(loop_repeat) = self.read_loop_repeat()? {
+            Ok(Some(loop_repeat))
+        } else if let Some(loop_for) = self.read_loop_for()? {
+            Ok(Some(loop_for))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_loop_while(&mut self) -> Result<Option<AstNode>, Error> {
+        if matches!(self.reader.peek(0), Some(&Token::While)) {
+            self.reader.consume(1);
+
+            let cond = self
+                .read_exp()?
+                .ok_or_else(|| Error::new("Expected expression after 'While'".to_string()))?;
+
+            expect!(self.reader.next(), "Do", Token::Do)?;
+            let block = self.read_block()?;
+            expect!(self.reader.next(), "End", Token::End)?;
+
+            Ok(Some(AstNode::WhileLoop(Box::new(cond), Box::new(block))))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn read_loop_repeat(&mut self) -> Result<Option<AstNode>, Error> {
+        Ok(None)
+    }
+
+    fn read_loop_for(&mut self) -> Result<Option<AstNode>, Error> {
+        Ok(None)
     }
 
     fn read_if(&mut self) -> Option<AstNode> {
@@ -500,6 +535,9 @@ pub enum AstNode {
      * based on the Option in IfStub */
     If(Vec<AstNode>),
 
+    /* cond, block */
+    WhileLoop(Box<AstNode>, Box<AstNode>),
+
     /* key, val */
     KeyValue(Box<AstNode>, Box<AstNode>),
 
@@ -559,6 +597,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Index(_t, _k) => write!(f, "Index"),
             AstNode::IfStub(_cond, _body) => write!(f, "IfStub"),
             AstNode::If(_stubs) => write!(f, "If"),
+            AstNode::WhileLoop(_cond, _block) => write!(f, "WhileLoop"),
             AstNode::KeyValue(_key, _value) => write!(f, "KeyValue"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
@@ -611,6 +650,7 @@ impl ptree::item::TreeItem for AstNode {
                 }
             }
             AstNode::If(stubs) => stubs.to_vec(),
+            AstNode::WhileLoop(cond, block) => vec![*cond.clone(), *block.clone()],
             AstNode::KeyValue(key, value) => vec![*key.clone(), *value.clone()],
             AstNode::Table(kv) => kv.clone(),
             _ => vec![],
