@@ -81,7 +81,7 @@ impl<'a> AstConstructor<'a> {
             stats.append(&mut stat);
         }
 
-        if let Some(last_stat) = self.read_laststat() {
+        if let Some(last_stat) = self.read_laststat()? {
             if self.reader.peek(0) == Some(&Token::Semicolon) {
                 self.reader.consume(1);
             }
@@ -110,8 +110,20 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_laststat(&mut self) -> Option<AstNode> {
-        None
+    fn read_laststat(&mut self) -> Result<Option<AstNode>, Error> {
+        match self.reader.peek(0) {
+            Some(Token::Return) => {
+                self.reader.consume(1);
+
+                Ok(Some(AstNode::Return(self.read_explist()?)))
+            }
+            Some(Token::Break) => {
+                self.reader.consume(1);
+
+                Ok(Some(AstNode::Break))
+            }
+            _ => Ok(None),
+        }
     }
 
     fn read_varlist_assignment(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
@@ -658,7 +670,7 @@ pub enum AstNode {
     Ident(String),
 
     /* expr */
-    Return(Option<Box<AstNode>>),
+    Return(Vec<AstNode>),
 
     /* left expr, right expr */
     Add(Box<AstNode>, Box<AstNode>),
@@ -739,6 +751,7 @@ pub enum AstNode {
     Table(Vec<AstNode>),
 
     Vararg,
+    Break,
 
     Str(String),
     Number(f64),
@@ -770,7 +783,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::Declaration(_ident, _value) => write!(f, "Declaration"),
             AstNode::Assignment(_ident, _value) => write!(f, "Assignment"),
             AstNode::Ident(name) => write!(f, "Ident {}", name),
-            AstNode::Return(_expr) => write!(f, "Return"),
+            AstNode::Return(_exprs) => write!(f, "Return"),
             AstNode::Add(_left, _right) => write!(f, "Add"),
             AstNode::Subtract(_left, _right) => write!(f, "Subtract"),
             AstNode::Multiply(_left, _right) => write!(f, "Multiply"),
@@ -797,6 +810,7 @@ impl ptree::item::TreeItem for AstNode {
             AstNode::KeyValue(_key, _value) => write!(f, "KeyValue"),
             AstNode::Table(_kv) => write!(f, "Table"),
             AstNode::Vararg => write!(f, "..."),
+            AstNode::Break => write!(f, "Break"),
             AstNode::Str(s) => write!(f, "Str \"{}\"", s),
             AstNode::Number(fl) => write!(f, "Number {}", fl),
             AstNode::Bool(b) => write!(f, "Bool {}", b),
@@ -816,10 +830,7 @@ impl ptree::item::TreeItem for AstNode {
             }
             AstNode::Declaration(ident, value) => vec![*ident.clone(), *value.clone()],
             AstNode::Assignment(ident, value) => vec![*ident.clone(), *value.clone()],
-            AstNode::Return(expr) => match expr {
-                Some(expr) => vec![*expr.clone()],
-                None => vec![],
-            },
+            AstNode::Return(exprs) => exprs.clone(),
             AstNode::Add(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Subtract(left, right) => vec![*left.clone(), *right.clone()],
             AstNode::Multiply(left, right) => vec![*left.clone(), *right.clone()],
