@@ -183,6 +183,10 @@ impl<'a> AstConstructor<'a> {
     fn read_var(&mut self) -> Result<Option<AstNode>, Error> {
         println!("read_var {:?}", self);
 
+        if !matches!(self.peek(0), Some(Token::Ident(_)) | Some(Token::LeftParen)) {
+            return Ok(None);
+        }
+
         let pos = self.pos();
 
         if let Some(name) = self.read_name() {
@@ -192,7 +196,9 @@ impl<'a> AstConstructor<'a> {
                 Some(t) => match t {
                     Token::LeftSquareBracket => {
                         self.consume(1);
-                        let exp = self.read_exp()?.unwrap();
+                        let exp = self.read_exp()?.ok_or_else(|| {
+                            Error::new("Expected expression after '['".to_string())
+                        })?;
 
                         expect!(self.next(), "]", Token::RightSquareBracket)?;
 
@@ -200,7 +206,9 @@ impl<'a> AstConstructor<'a> {
                     }
                     Token::Dot => {
                         self.consume(1);
-                        let name = self.read_name().unwrap();
+                        let name = self
+                            .read_name()
+                            .ok_or_else(|| Error::new("Expected ident after '.'".to_string()))?;
 
                         Ok(Some(AstNode::Index(Box::new(prefix_exp), Box::new(name))))
                     }
@@ -682,7 +690,7 @@ impl<'a> AstConstructor<'a> {
                 {
                     let key = self.read_name().unwrap();
 
-                    expect!(self.next(), "=", Token::Equal)?;
+                    self.consume(1);
 
                     let val = self
                         .read_exp()?
