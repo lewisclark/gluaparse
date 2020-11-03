@@ -51,6 +51,12 @@ impl<'a> Reader<'a> {
     }
 }
 
+impl<'a> std::fmt::Debug for Reader<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {:?}", self.pos, self.peek(0))
+    }
+}
+
 /* ---------- AstConstructor ---------- */
 
 pub struct AstConstructor<'a> {
@@ -69,7 +75,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     pub fn read_block(&mut self) -> Result<AstNode, Error> {
-        println!("read_block");
+        println!("read_block {:?}", self.reader);
 
         let mut stats = Vec::new();
 
@@ -93,7 +99,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_stat(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
-        println!("read_stat");
+        println!("read_stat {:?}", self.reader);
 
         if let Some(varlist) = self.read_varlist_assignment()? {
             Ok(Some(varlist))
@@ -112,6 +118,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_laststat(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_laststat {:?}", self.reader);
+
         match self.reader.peek(0) {
             Some(Token::Return) => {
                 self.reader.consume(1);
@@ -128,7 +136,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_varlist_assignment(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
-        println!("read_varlist_assignment");
+        println!("read_varlist_assignment {:?}", self.reader);
 
         let pos = self.reader.pos();
         let varlist = self.read_varlist()?;
@@ -173,7 +181,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_var(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_var");
+        println!("read_var {:?}", self.reader);
 
         if let Some(name) = self.read_name() {
             Ok(Some(name))
@@ -204,7 +212,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_name(&mut self) -> Option<AstNode> {
-        println!("read_name {:?}", self.reader.peek(0));
+        println!("read_name {:?}", self.reader);
 
         match self.reader.peek(0) {
             Some(t) => match t {
@@ -236,7 +244,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_prefix_exp(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_prefix_exp");
+        println!("read_prefix_exp {:?}", self.reader);
 
         if !matches!(self.reader.peek(0), Some(&Token::Ident(_)) | Some(&Token::LeftParen)) {
             return Ok(None);
@@ -258,7 +266,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_exp(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_exp {:?}", self.reader.peek(0));
+        println!("read_exp {:?}", self.reader);
 
         if let Some(nil) = self.read_nil() {
             Ok(Some(nil))
@@ -286,7 +294,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_explist(&mut self) -> Result<Vec<AstNode>, Error> {
-        println!("read_explist");
+        println!("read_explist {:?}", self.reader);
 
         let mut exps = Vec::new();
 
@@ -304,6 +312,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_call(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_call {:?}", self.reader);
+
         if let Some(prefix_exp) = self.read_prefix_exp()? {
             if matches!(self.reader.peek(0), Some(&Token::Semicolon)) {
                 unimplemented!();
@@ -318,6 +328,8 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_args(&mut self) -> Result<Option<Vec<AstNode>>, Error> {
+        println!("read_args {:?}", self.reader);
+
         match self.reader.peek(0) {
             Some(Token::LeftParen) => {
                 self.reader.consume(1);
@@ -402,10 +414,8 @@ impl<'a> AstConstructor<'a> {
         Ok(None)
     }
 
-    /* cond, block - if cond is None then it is an else */
-    // IfStub(Option<Box<AstNode>>, Box<AstNode>),
     fn read_if(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_if {:?}", self.reader.peek(0));
+        println!("read_if {:?}", self.reader);
 
         if matches!(self.reader.peek(0), Some(Token::If)) {
             let mut if_stubs = vec![self.read_if_stub()?];
@@ -431,7 +441,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_if_stub(&mut self) -> Result<AstNode, Error> {
-        println!("read_if_stub {:?}", self.reader.peek(0));
+        println!("read_if_stub {:?}", self.reader);
 
         match self.reader.peek(0) {
             Some(Token::If) | Some(Token::ElseIf) => {
@@ -459,7 +469,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_func(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_func {:?}", self.reader.peek(0));
+        println!("read_func {:?}", self.reader);
 
         if matches!(self.reader.peek(0), Some(&Token::Function)) {
             self.reader.consume(1);
@@ -475,7 +485,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_funcbody(&mut self) -> Result<Option<(Vec<AstNode>, AstNode)>, Error> {
-        println!("read_funcbody {:?}", self.reader.peek(0));
+        println!("read_funcbody {:?}", self.reader);
 
         if matches!(self.reader.peek(0), Some(&Token::LeftParen)) {
             self.reader.consume(1);
@@ -491,7 +501,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_parlist(&mut self) -> Vec<AstNode> {
-        println!("read_parlist {:?}", self.reader.peek(0));
+        println!("read_parlist {:?}", self.reader);
 
         if matches!(self.reader.peek(0), Some(&Token::DotDotDot)) {
             self.reader.consume(1);
@@ -567,7 +577,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_vararg(&mut self) -> Option<AstNode> {
-        println!("read_vararg {:?}", self.reader.peek(0));
+        println!("read_vararg {:?}", self.reader);
 
         if matches!(self.reader.peek(0), Some(&Token::DotDotDot)) {
             self.reader.consume(1);
@@ -579,7 +589,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_table_constructor(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_table_constructor {:?}", self.reader.peek(0));
+        println!("read_table_constructor {:?}", self.reader);
 
         if matches!(self.reader.peek(0), Some(&Token::LeftCurlyBracket)) {
             self.reader.consume(1);
@@ -595,7 +605,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_fieldlist(&mut self) -> Result<Vec<AstNode>, Error> {
-        println!("read_fieldlist {:?}", self.reader.peek(0));
+        println!("read_fieldlist {:?}", self.reader);
 
         let mut fieldlist = Vec::new();
 
@@ -616,7 +626,7 @@ impl<'a> AstConstructor<'a> {
     }
 
     fn read_field(&mut self) -> Result<Option<AstNode>, Error> {
-        println!("read_field {:?}", self.reader.peek(0));
+        println!("read_field {:?}", self.reader);
 
         match self.reader.peek(0) {
             Some(Token::LeftSquareBracket) => {
