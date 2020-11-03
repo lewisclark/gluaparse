@@ -15,6 +15,24 @@ macro_rules! expect {
     };
 }
 
+macro_rules! binaryop {
+    ( $self:expr, $left:expr, $(($token:pat, $node:expr, $str:expr)),+ ) => {
+        match $self.peek(0) {
+            $( Some($token) => {
+                $self.consume(1);
+
+                Ok(Some($node(
+                    Box::new($left),
+                    Box::new($self.read_exp()?.ok_or_else(|| {
+                        Error::new(format!("Expected expression after '{}'", $str))
+                    })?),
+                )))
+            } )*
+            _ => Ok(None)
+        }
+    }
+}
+
 /* ---------- AstConstructor ---------- */
 
 pub struct AstConstructor<'a> {
@@ -257,28 +275,37 @@ impl<'a> AstConstructor<'a> {
     fn read_exp(&mut self) -> Result<Option<AstNode>, Error> {
         println!("read_exp {:?}", self);
 
-        if let Some(nil) = self.read_nil() {
-            Ok(Some(nil))
+        let exp = if let Some(nil) = self.read_nil() {
+            Some(nil)
         } else if let Some(b) = self.read_bool() {
-            Ok(Some(b))
+            Some(b)
         } else if let Some(n) = self.read_number() {
-            Ok(Some(n))
+            Some(n)
         } else if let Some(s) = self.read_string() {
-            Ok(Some(s))
+            Some(s)
         } else if let Some(vararg) = self.read_vararg() {
-            Ok(Some(vararg))
+            Some(vararg)
         } else if let Some(func) = self.read_func()? {
-            Ok(Some(func))
+            Some(func)
         } else if let Some(prefix_exp) = self.read_prefix_exp()? {
-            Ok(Some(prefix_exp))
+            Some(prefix_exp)
         } else if let Some(table) = self.read_table_constructor()? {
-            Ok(Some(table))
-        } else if let Some(binop) = self.read_binaryop()? {
-            Ok(Some(binop))
+            Some(table)
         } else if let Some(unaryop) = self.read_unaryop()? {
-            Ok(Some(unaryop))
+            Some(unaryop)
         } else {
-            Ok(None)
+            None
+        };
+
+        match exp {
+            Some(exp) => {
+                if self.is_binaryop() {
+                    self.read_binaryop(exp)
+                } else {
+                    Ok(Some(exp))
+                }
+            }
+            None => Ok(None),
         }
     }
 
@@ -669,26 +696,32 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_binaryop(&mut self) -> Result<Option<AstNode>, Error> {
+    fn read_binaryop(&mut self, left: AstNode) -> Result<Option<AstNode>, Error> {
         println!("read_binaryop {:?}", self);
 
-        let pos = self.pos();
-
-        if let Some(left) = self.read_exp()? {
-            match self.peek(0) {
-                Some(Token::And) => Ok(Some(AstNode::And(
-                    Box::new(left),
-                    Box::new(self.read_exp()?.unwrap()), // bad unwrap
-                ))),
-                _ => {
-                    self.set_pos(pos);
-
-                    Ok(None)
-                }
-            }
-        } else {
-            Ok(None)
-        }
+        binaryop!(
+            self,
+            left,
+            (Token::Plus, AstNode::Add, "+"),
+            (Token::Minus, AstNode::Subtract, "-"),
+            (Token::Asterisk, AstNode::Multiply, "*"),
+            (Token::Slash, AstNode::Divide, "/"),
+            (Token::Caret, AstNode::Exponentiate, "^"),
+            (Token::Percent, AstNode::Modulo, "%"),
+            (Token::DotDot, AstNode::Concat, ".."),
+            (Token::LeftAngleBracket, AstNode::LessThan, "<"),
+            (Token::LeftAngleBracketEqual, AstNode::LessThanOrEqual, "<="),
+            (Token::RightAngleBracket, AstNode::GreaterThan, ">"),
+            (
+                Token::RightAngleBracketEqual,
+                AstNode::GreaterThanOrEqual,
+                ">="
+            ),
+            (Token::EqualEqual, AstNode::Equal, "=="),
+            (Token::NotEqual, AstNode::NotEqual, "~=/!="),
+            (Token::And, AstNode::And, "and/&&"),
+            (Token::Or, AstNode::Or, "or/||")
+        )
     }
 
     fn read_unaryop(&mut self) -> Result<Option<AstNode>, Error> {
