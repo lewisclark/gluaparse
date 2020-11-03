@@ -295,7 +295,7 @@ impl<'a> AstConstructor<'a> {
             Ok(Some(prefix_exp))
         } else if let Some(table) = self.read_table_constructor()? {
             Ok(Some(table))
-        } else if let Some(binop) = self.read_binop() {
+        } else if let Some(binop) = self.read_binaryop()? {
             Ok(Some(binop))
         } else if let Some(unaryop) = self.read_unaryop()? {
             Ok(Some(unaryop))
@@ -694,10 +694,26 @@ impl<'a> AstConstructor<'a> {
         }
     }
 
-    fn read_binop(&mut self) -> Option<AstNode> {
-        println!("read_binop {:?}", self.reader);
+    fn read_binaryop(&mut self) -> Result<Option<AstNode>, Error> {
+        println!("read_binaryop {:?}", self.reader);
 
-        None
+        let pos = self.reader.pos();
+
+        if let Some(left) = self.read_exp()? {
+            match self.reader.peek(0) {
+                Some(Token::And) => Ok(Some(AstNode::And(
+                    Box::new(left),
+                    Box::new(self.read_exp()?.unwrap()), // bad unwrap
+                ))),
+                _ => {
+                    self.reader.set_pos(pos);
+
+                    Ok(None)
+                }
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     fn read_unaryop(&mut self) -> Result<Option<AstNode>, Error> {
@@ -739,6 +755,27 @@ impl<'a> AstConstructor<'a> {
         matches!(
             self.reader.peek(0),
             Some(Token::Minus) | Some(Token::Not) | Some(Token::Hashtag)
+        )
+    }
+
+    fn is_binaryop(&self) -> bool {
+        matches!(
+            self.reader.peek(0),
+            Some(Token::Plus)
+                | Some(Token::Minus)
+                | Some(Token::Asterisk)
+                | Some(Token::Slash)
+                | Some(Token::Caret)
+                | Some(Token::Percent)
+                | Some(Token::DotDot)
+                | Some(Token::LeftAngleBracket)
+                | Some(Token::LeftAngleBracketEqual)
+                | Some(Token::RightAngleBracket)
+                | Some(Token::RightAngleBracketEqual)
+                | Some(Token::EqualEqual)
+                | Some(Token::NotEqual)
+                | Some(Token::And)
+                | Some(Token::Or)
         )
     }
 }
